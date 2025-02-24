@@ -25,7 +25,7 @@ module Memory
 			attr :pids
 			
 			def add(pid, **options)
-				@pids[pid] = Monitor.new(**options, pid: pid)
+				@pids[pid] = Monitor.new(pid, **options)
 			end
 			
 			def remove(pid)
