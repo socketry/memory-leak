@@ -48,7 +48,7 @@ module Memory
 				
 				sorted.each do |pid, monitor|
 					if total > limit
-						if yield pid, monitor
+						if yield pid, monitor, total
 							total -= monitor.current
 						end
 					else

@@ -71,11 +71,13 @@ describe Memory::Leak::Cluster do
 			big_child.write_message(action: "allocate", size: (cluster.limit * 0.8 * 1024).floor)
 			big_child.wait_for_message("allocated")
 			
-			small_child.write_message(action: "allocate", size: (cluster.limit * 0.3 * 1024).floor)
+			small_child.write_message(action: "allocate", size: (cluster.limit * 0.2 * 1024).floor)
 			small_child.wait_for_message("allocated")
 			
 			# The total memory usage is 110% of the limit, so the biggest child should be terminated:
-			cluster.check! do |pid, monitor|
+			cluster.check! do |pid, monitor, total|
+				$stderr.puts "Checking PID: #{pid}, current: #{monitor.current} KiB (total: #{total} KiB / #{cluster.limit} KiB)"
+				
 				expect(pid).to be == big_child.pid
 				expect(monitor).not.to be(:leaking?)
 				
