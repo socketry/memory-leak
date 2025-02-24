@@ -22,12 +22,19 @@ describe Memory::Leak::Detector do
 		
 		with "a leaking child process" do
 			include_context Memory::Leak::ALeakingProcess
-			let(:detector) {subject.new(pid: @child.pid)}
+			let(:detector) {subject.new(pid: @child.pid, limit: 10)}
 			
 			it "can detect memory leaks" do
-				detector.capture_sample
+				wait_for_message("ready")
 				
-				detector.limit.times do
+				# The child process may have an initial heap which allocations will use up before the heap is increased, so we need to consume that first:
+				until detector.count > 0
+					write_message(action: "allocate", size: detector.threshold * 1024)
+					wait_for_message("allocated")
+					detector.capture_sample
+				end
+				
+				until detector.memory_leak_detected?
 					# The threshold is measured in KiB, so multiply by 1024 to get the threshold in bytes + 1 to ensure that the threshold is exceeded:
 					write_message(action: "allocate", size: detector.threshold * 1024 + 1)
 					wait_for_message("allocated")
