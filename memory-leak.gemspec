@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
 	spec.name = "memory-leak"
 	spec.version = Memory::Leak::VERSION
 	
-	spec.summary = "A memory leak detector."
+	spec.summary = "A memory leak monitor."
 	spec.authors = ["Samuel Williams"]
 	spec.license = "MIT"
 	

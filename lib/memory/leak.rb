@@ -4,7 +4,7 @@
 # Copyright, 2025, by Samuel Williams.
 
 require_relative "leak/version"
-require_relative "leak/detector"
+require_relative "leak/monitor"
 
 # @namespace
 module Memory

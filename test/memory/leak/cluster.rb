@@ -17,7 +17,7 @@ describe Memory::Leak::Cluster do
 		before do
 			@children = 3.times.map do
 				child = Memory::Leak::LeakingChild.new
-				detector = cluster.add(child.pid, limit: 10)
+				monitor = cluster.add(child.pid, limit: 10)
 				
 				[child.pid, child]
 			end.to_h
@@ -33,21 +33,21 @@ describe Memory::Leak::Cluster do
 		
 		it "can detect memory leaks" do
 			child = children.values.first
-			detector = cluster.pids[child.pid]
+			monitor = cluster.pids[child.pid]
 			
 			# Force the first child to trigger the memory leak:
-			until detector.leaking?
-				child.write_message(action: "allocate", size: detector.threshold * 1024 + 1)
+			until monitor.leaking?
+				child.write_message(action: "allocate", size: monitor.threshold * 1024 + 1)
 				child.wait_for_message("allocated")
 				
 				# Capture a sample of the memory usage:
-				detector.sample!
+				monitor.sample!
 			end
 			
-			cluster.check! do |pid, detector|
+			cluster.check! do |pid, monitor|
 				expect(pid).to be == child.pid
-				expect(detector.count).to be == detector.limit
-				expect(detector).to be(:leaking?)
+				expect(monitor.count).to be == monitor.limit
+				expect(monitor).to be(:leaking?)
 				
 				child.close
 				children.delete(pid)
@@ -75,9 +75,9 @@ describe Memory::Leak::Cluster do
 			small_child.wait_for_message("allocated")
 			
 			# The total memory usage is 110% of the limit, so the biggest child should be terminated:
-			cluster.check! do |pid, detector|
+			cluster.check! do |pid, monitor|
 				expect(pid).to be == big_child.pid
-				expect(detector).not.to be(:leaking?)
+				expect(monitor).not.to be(:leaking?)
 				
 				big_child.close
 				children.delete(pid)

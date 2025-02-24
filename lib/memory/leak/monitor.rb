@@ -12,7 +12,7 @@ module Memory
 		# A memory leak is characterised by the memory usage of the application continuing to rise over time. We can detect this by sampling memory usage and comparing it to the previous sample. If the memory usage is higher than the previous sample, we can say that the application has allocated more memory. Eventually we expect to see this stabilize, but if it continues to rise, we can say that the application has a memory leak.
 		#
 		# We should be careful not to filter historical data, as some memory leaks may only become apparent after a long period of time. Any kind of filtering may prevent us from detecting such a leak.
-		class Detector
+		class Monitor
 			# We only track heap size changes greater than this threshold (KB), across the DEFAULT_INTERVAL.
 			# True memory leaks will eventually hit this threshold, while small fluctuations will not.
 			DEFAULT_THRESHOLD = 1024*10
@@ -22,7 +22,7 @@ module Memory
 			# With a default interval of 10 seconds, this will track the last ~3 minutes of heap size increases.
 			DEFAULT_LIMIT = 20
 			
-			# Create a new detector.
+			# Create a new monitor.
 			#
 			# @parameter maximum [Numeric] The initial maximum heap size, from which we willl track increases, in KiB.
 			# @parameter threshold [Numeric] The threshold for heap size increases, in KiB.
@@ -78,7 +78,7 @@ module Memory
 			
 			# Capture a memory usage sample and yield if a memory leak is detected.
 			#
-			# @yields {|sample, detector| ...} If a memory leak is detected.
+			# @yields {|sample, monitor| ...} If a memory leak is detected.
 			def sample!
 				@current = memory_usage
 				

@@ -4,7 +4,7 @@
 # Copyright, 2025, by Samuel Williams.
 
 require "console"
-require_relative "detector"
+require_relative "monitor"
 
 module Memory
 	module Leak
@@ -25,16 +25,16 @@ module Memory
 			attr :pids
 			
 			def add(pid, **options)
-				@pids[pid] = Detector.new(**options, pid: pid)
+				@pids[pid] = Monitor.new(**options, pid: pid)
 			end
 			
 			def remove(pid)
 				@pids.delete(pid)
 			end
 			
-			# Apply the memory limit to the cluster. If the total memory usage exceeds the limit, yields each PID and detector in order of maximum memory usage, so that they could be terminated and/or removed.
+			# Apply the memory limit to the cluster. If the total memory usage exceeds the limit, yields each PID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
 			#
-			# @yields {|pid, detector| ...} each process ID and detector in order of maximum memory usage, return true if it was terminated to adjust memory usage.
+			# @yields {|pid, monitor| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
 			def apply_limit!(limit = @limit)
 				total = @pids.values.map(&:current).sum
 				
@@ -42,14 +42,14 @@ module Memory
 					Console.warn(self, "Total memory usage exceeded limit.", total: total, limit: limit)
 				end
 				
-				sorted = @pids.sort_by do |pid, detector|
-					-detector.current
+				sorted = @pids.sort_by do |pid, monitor|
+					-monitor.current
 				end
 				
-				sorted.each do |pid, detector|
+				sorted.each do |pid, monitor|
 					if total > limit
-						if yield pid, detector
-							total -= detector.current
+						if yield pid, monitor
+							total -= monitor.current
 						end
 					else
 						break
@@ -60,13 +60,13 @@ module Memory
 			def check!(&block)
 				leaking = []
 				
-				@pids.each do |pid, detector|
-					detector.sample!
+				@pids.each do |pid, monitor|
+					monitor.sample!
 					
-					if detector.leaking?
-						Console.debug(self, "Memory Leak Detected!", pid: pid, detector: detector)
+					if monitor.leaking?
+						Console.debug(self, "Memory Leak Detected!", pid: pid, monitor: monitor)
 						
-						leaking << [pid, detector]
+						leaking << [pid, monitor]
 					end
 				end
 				
