@@ -7,13 +7,28 @@ require "json"
 
 module Memory
 	module Leak
-		ALeakingProcess = Sus::Shared("a leaking process") do
+		class LeakingChild
+			def initialize
+				@io = IO.popen(["ruby", File.expand_path("leaking_child.rb", __dir__)], "r+")
+			end
+			
+			def pid
+				@io.pid
+			end
+			
+			def close
+				if io = @io
+					@io = nil
+					io.close
+				end
+			end
+			
 			def write_message(**message)
-				@child.puts(JSON.dump(message))
+				@io.puts(JSON.dump(message))
 			end
 			
 			def read_message
-				if line = @child.gets
+				if line = @io.gets
 					return JSON.parse(line, symbolize_names: true)
 				end
 			end
@@ -25,14 +40,16 @@ module Memory
 					end
 				end
 			end
-			
+		end
+		
+		ALeakingProcess = Sus::Shared("a leaking process") do
 			around do |&block|
-				IO.popen(["ruby", File.expand_path("leaking_child.rb", __dir__)], "r+") do |child|
-					@child = child
+				begin
+					@child = LeakingChild.new
 					
 					super(&block)
 				ensure
-					child.close
+					@child&.close
 					@child = nil
 				end
 			end

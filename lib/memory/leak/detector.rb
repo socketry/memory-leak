@@ -66,14 +66,14 @@ module Memory
 			# If the number of increasing heap size samples is greater than or equal to the limit, a memory leak is assumed.
 			#
 			# @returns [Boolean] True if a memory leak has been detected.
-			def memory_leak_detected?
+			def leaking?
 				@count >= @limit
 			end
 			
 			# Capture a memory usage sample and yield if a memory leak is detected.
 			#
 			# @yields {|sample, detector| ...} If a memory leak is detected.
-			def capture_sample
+			def sample!
 				sample = memory_usage
 				
 				if @maximum
