@@ -8,26 +8,31 @@ require_relative "monitor"
 
 module Memory
 	module Leak
-		# Detects memory leaks by tracking heap size increases.
+		# Detects memory leaks in a cluster of processes.
 		#
-		# A memory leak is characterised by the memory usage of the application continuing to rise over time. We can detect this by sampling memory usage and comparing it to the previous sample. If the memory usage is higher than the previous sample, we can say that the application has allocated more memory. Eventually we expect to see this stabilize, but if it continues to rise, we can say that the application has a memory leak.
-		#
-		# We should be careful not to filter historical data, as some memory leaks may only become apparent after a long period of time. Any kind of filtering may prevent us from detecting such a leak.
+		# This class is used to manage a cluster of processes and detect memory leaks in each process. It can also apply a memory limit to the cluster, and terminate processes if the memory limit is exceeded.
 		class Cluster
+			# Create a new cluster.
+			#
+			# @parameter limit [Numeric | Nil] The (total) memory limit for the cluster.
 			def initialize(limit: nil)
 				@limit = limit
 				
 				@pids = {}
 			end
 			
+			# @attribute [Numeric | Nil] The memory limit for the cluster.
 			attr_accessor :limit
 			
+			# @attribute [Hash(PID, Monitor)] The process IDs and monitors in the cluster.
 			attr :pids
 			
+			# Add a new process ID to the cluster.
 			def add(pid, **options)
 				@pids[pid] = Monitor.new(pid, **options)
 			end
 			
+			# Remove a process ID from the cluster.
 			def remove(pid)
 				@pids.delete(pid)
 			end
@@ -57,6 +62,9 @@ module Memory
 				end
 			end
 			
+			# Check all processes in the cluster for memory leaks.
+			#
+			# @yields {|pid, monitor| ...} each process ID and monitor that is leaking or exceeds the memory limit.
 			def check!(&block)
 				leaking = []
 				
