@@ -61,6 +61,11 @@ module Memory
 				end
 			end
 			
+			# Indicates whether a memory leak has been detected.
+			#
+			# If the number of increasing heap size samples is greater than or equal to the limit, a memory leak is assumed.
+			#
+			# @returns [Boolean] True if a memory leak has been detected.
 			def memory_leak_detected?
 				@count >= @limit
 			end
