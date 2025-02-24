@@ -23,7 +23,7 @@ allocations = []
 while message = read_message
 	case message[:action]
 	when "allocate"
-		allocations << SecureRandom.hex(message[:size])
+		allocations << SecureRandom.bytes(message[:size])
 		write_message(action: "allocated", size: message[:size])
 	when "free"
 		allocations.pop

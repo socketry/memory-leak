@@ -21,6 +21,8 @@ group :test do
 	gem "decode"
 	gem "rubocop"
 	
+	gem "sus-fixtures-console"
+	
 	gem "bake-test"
 	gem "bake-test-external"
 	

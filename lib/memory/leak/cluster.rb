@@ -20,6 +20,8 @@ module Memory
 				@pids = {}
 			end
 			
+			attr_accessor :limit
+			
 			attr :pids
 			
 			def add(pid, **options)
@@ -34,20 +36,20 @@ module Memory
 			#
 			# @yields {|pid, detector| ...} each process ID and detector in order of maximum memory usage, return true if it was terminated to adjust memory usage.
 			def apply_limit!(limit = @limit)
-				total = @pids.values.map(&:maximum).sum
+				total = @pids.values.map(&:current).sum
 				
 				if total > limit
 					Console.warn(self, "Total memory usage exceeded limit.", total: total, limit: limit)
 				end
 				
 				sorted = @pids.sort_by do |pid, detector|
-					detector.maximum
+					-detector.current
 				end
 				
 				sorted.each do |pid, detector|
 					if total > limit
 						if yield pid, detector
-							total -= detector.maximum
+							total -= detector.current
 						end
 					else
 						break

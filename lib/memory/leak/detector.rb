@@ -36,6 +36,7 @@ module Memory
 				
 				# The number of increasing heap size samples.
 				@count = 0
+				@current = nil
 			end
 			
 			# @attribute [Numeric] The current maximum heap size.
@@ -55,10 +56,15 @@ module Memory
 			# Even thought the absolute value of this number may not very useful, the relative change is useful for detecting memory leaks, and it works on most platforms.
 			#
 			# @returns [Numeric] Memory usage size in KiB.
-			def memory_usage(pid = @pid)
-				IO.popen(["ps", "-o", "rss=", pid.to_s]) do |io|
+			private def memory_usage
+				IO.popen(["ps", "-o", "rss=", @pid.to_s]) do |io|
 					return Integer(io.readlines.last)
 				end
+			end
+			
+			# @returns [Integer] The last sampled memory usage.
+			def current
+				@current ||= memory_usage
 			end
 			
 			# Indicates whether a memory leak has been detected.
@@ -74,24 +80,24 @@ module Memory
 			#
 			# @yields {|sample, detector| ...} If a memory leak is detected.
 			def sample!
-				sample = memory_usage
+				@current = memory_usage
 				
 				if @maximum
-					delta = sample - @maximum
-					Console.debug(self, "Heap size captured.", sample: sample, delta: delta, threshold: @threshold, maximum: @maximum)
+					delta = @current - @maximum
+					Console.debug(self, "Heap size captured.", current: @current, delta: delta, threshold: @threshold, maximum: @maximum)
 					
 					if delta > @threshold
-						@maximum = sample
+						@maximum = @current
 						@count += 1
 						
 						Console.debug(self, "Heap size increased.", maximum: @maximum, count: @count)
 					end
 				else
-					Console.debug(self, "Initial heap size captured.", sample: sample)
-					@maximum = sample
+					Console.debug(self, "Initial heap size captured.", current: @current)
+					@maximum = @current
 				end
 				
-				return sample
+				return @current
 			end
 		end
 	end

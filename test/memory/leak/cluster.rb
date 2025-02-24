@@ -6,18 +6,32 @@
 require "memory/leak/cluster"
 require "memory/leak/a_leaking_process"
 
+require "sus/fixtures/console"
+
 describe Memory::Leak::Cluster do
+	include Sus::Fixtures::Console::CapturedLogger
+	
 	let(:cluster) {subject.new}
 	
 	with "a leaking child process" do
-		it "can detect memory leaks" do
-			children = 3.times.map do
+		before do
+			@children = 3.times.map do
 				child = Memory::Leak::LeakingChild.new
 				detector = cluster.add(child.pid, limit: 10)
 				
 				[child.pid, child]
 			end.to_h
-			
+		end
+		
+		after do
+			@children.each_value do |child|
+				child.close
+			end
+		end
+		
+		attr :children
+		
+		it "can detect memory leaks" do
 			child = children.values.first
 			detector = cluster.pids[child.pid]
 			
@@ -45,6 +59,37 @@ describe Memory::Leak::Cluster do
 			children.each_value do |child|
 				child.close
 			end
+		end
+		
+		it "can apply memory limit" do
+			# 100 MiB limit:
+			cluster.limit = 1024*100
+			
+			big_child = children.values.first
+			small_child = children.values.last
+			
+			big_child.write_message(action: "allocate", size: (cluster.limit * 0.8 * 1024).floor)
+			big_child.wait_for_message("allocated")
+			
+			small_child.write_message(action: "allocate", size: (cluster.limit * 0.3 * 1024).floor)
+			small_child.wait_for_message("allocated")
+			
+			# The total memory usage is 110% of the limit, so the biggest child should be terminated:
+			cluster.check! do |pid, detector|
+				expect(pid).to be == big_child.pid
+				expect(detector).not.to be(:leaking?)
+				
+				big_child.close
+				children.delete(pid)
+				cluster.remove(pid)
+				
+				true
+			end
+			
+			expect_console.to have_logged(
+				severity: be == :warn,
+				message: be == "Total memory usage exceeded limit."
+			)
 		end
 	end
 end
