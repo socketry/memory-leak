@@ -12,6 +12,10 @@ Please see the [project documentation](https://socketry.github.io/memory-leak/) 
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.
 
+### v0.1.0
+
+  - Initial implementation.
+
 ## Contributing
 
 We welcome contributions to this project.
