@@ -56,7 +56,7 @@ module Memory
 			#
 			# @returns [Numeric] Memory usage size in KiB.
 			def memory_usage(pid = @pid)
-				IO.popen(["ps", pid.to_s, "-o", "rss="]) do |io|
+				IO.popen(["ps", "-o", "rss=", pid.to_s]) do |io|
 					return Integer(io.readlines.last)
 				end
 			end
