@@ -17,21 +17,25 @@ def write_message(**message)
 	$stdout.flush
 end
 
-write_message(action: "ready")
+begin
+	write_message(action: "ready")
 
-allocations = []
-while message = read_message
-	case message[:action]
-	when "allocate"
-		allocations << SecureRandom.bytes(message[:size])
-		write_message(action: "allocated", size: message[:size])
-	when "free"
-		allocations.pop
-		write_message(action: "freed")
-	when "clear"
-		allocations.clear
-		write_message(action: "cleared")
-	when "exit"
-		break
+	allocations = []
+	while message = read_message
+		case message[:action]
+		when "allocate"
+			allocations << SecureRandom.bytes(message[:size])
+			write_message(action: "allocated", size: message[:size])
+		when "free"
+			allocations.pop
+			write_message(action: "freed")
+		when "clear"
+			allocations.clear
+			write_message(action: "cleared")
+		when "exit"
+			break
+		end
 	end
+rescue Interrupt
+	# Ignore - normal exit.
 end
