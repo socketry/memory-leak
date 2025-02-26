@@ -21,6 +21,19 @@ module Memory
 				@processes = {}
 			end
 			
+			# @returns [Hash] A serializable representation of the cluster.
+			def as_json(...)
+				{
+					limit: @limit,
+					processes: @processes.transform_values(&:as_json),
+				}
+			end
+			
+			# @returns [String] The JSON representation of the cluster.
+			def to_json(...)
+				as_json.to_json(...)
+			end
+			
 			# @attribute [Numeric | Nil] The memory limit for the cluster.
 			attr_accessor :limit
 			

@@ -40,6 +40,23 @@ module Memory
 				@current = nil
 			end
 			
+			# @returns [Hash] A serializable representation of the cluster.
+			def as_json(...)
+				{
+					process_id: @process_id,
+					current: @current,
+					maximum: @maximum,
+					threshold: @threshold,
+					limit: @limit,
+					count: @count,
+				}
+			end
+			
+			# @returns [String] The JSON representation of the cluster.
+			def to_json(...)
+				as_json.to_json(...)
+			end
+			
 			# @attribute [Integer] The process ID to monitor.
 			attr :process_id
 			
