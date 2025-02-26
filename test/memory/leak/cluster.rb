@@ -37,7 +37,7 @@ describe Memory::Leak::Cluster do
 			
 			# Force the first child to trigger the memory leak:
 			until monitor.leaking?
-				child.write_message(action: "allocate", size: monitor.threshold * 1024 + 1)
+				child.write_message(action: "allocate", size: monitor.threshold + 1)
 				child.wait_for_message("allocated")
 				
 				# Capture a sample of the memory usage:
@@ -63,20 +63,20 @@ describe Memory::Leak::Cluster do
 		
 		it "can apply memory limit" do
 			# 100 MiB limit:
-			cluster.limit = 1024*100
+			cluster.limit = 1024*1024*100
 			
 			big_child = children.values.first
 			big_monitor = cluster.processes[big_child.process_id]
 			small_child = children.values.last
 			small_monitor = cluster.processes[small_child.process_id]
 			
-			big_allocation = (cluster.limit * 0.8 * 1024).floor - big_monitor.current
+			big_allocation = (cluster.limit * 0.8).floor - big_monitor.current
 			if big_allocation > 0
 				big_child.write_message(action: "allocate", size: big_allocation)
 				big_child.wait_for_message("allocated")
 			end
 			
-			small_allocation = (cluster.limit * 0.2 * 1024).floor - small_monitor.current
+			small_allocation = (cluster.limit * 0.2).floor - small_monitor.current
 			if small_allocation > 0
 				small_child.write_message(action: "allocate", size: small_allocation)
 				small_child.wait_for_message("allocated")
@@ -84,8 +84,6 @@ describe Memory::Leak::Cluster do
 			
 			# The total memory usage is 110% of the limit, so the biggest child should be terminated:
 			cluster.check! do |process_id, monitor, total|
-				# $stderr.puts "Checking process_id: #{process_id}, current: #{monitor.current} KiB (total: #{total} KiB / #{cluster.limit} KiB)"
-				
 				expect(process_id).to be == big_child.process_id
 				expect(monitor).not.to be(:leaking?)
 				

@@ -29,14 +29,13 @@ describe Memory::Leak::Monitor do
 				
 				# The child process may have an initial heap which allocations will use up before the heap is increased, so we need to consume that first:
 				until monitor.count > 0
-					@child.write_message(action: "allocate", size: monitor.threshold * 1024)
+					@child.write_message(action: "allocate", size: monitor.threshold)
 					@child.wait_for_message("allocated")
 					monitor.sample!
 				end
 				
 				until monitor.leaking?
-					# The threshold is measured in KiB, so multiply by 1024 to get the threshold in bytes + 1 to ensure that the threshold is exceeded:
-					@child.write_message(action: "allocate", size: monitor.threshold * 1024 + 1)
+					@child.write_message(action: "allocate", size: monitor.threshold + 1)
 					@child.wait_for_message("allocated")
 					
 					# Capture a sample of the memory usage:

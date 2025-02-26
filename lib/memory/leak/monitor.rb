@@ -13,9 +13,9 @@ module Memory
 		#
 		# We should be careful not to filter historical data, as some memory leaks may only become apparent after a long period of time. Any kind of filtering may prevent us from detecting such a leak.
 		class Monitor
-			# We only track heap size changes greater than this threshold (KB), across the DEFAULT_INTERVAL.
+			# We only track heap size changes greater than this threshold, across the DEFAULT_INTERVAL.
 			# True memory leaks will eventually hit this threshold, while small fluctuations will not.
-			DEFAULT_THRESHOLD = 1024*10
+			DEFAULT_THRESHOLD = 1024*1024*10
 			
 			# We track the last N heap size increases.
 			# If the heap size is not stabilizing within the specified limit, we can assume there is a leak.
@@ -24,8 +24,8 @@ module Memory
 			
 			# Create a new monitor.
 			#
-			# @parameter maximum [Numeric] The initial maximum heap size, from which we willl track increases, in KiB.
-			# @parameter threshold [Numeric] The threshold for heap size increases, in KiB.
+			# @parameter maximum [Numeric] The initial maximum heap size, from which we willl track increases, in bytes.
+			# @parameter threshold [Numeric] The threshold for heap size increases, in bytes.
 			# @parameter limit [Numeric] The limit for the number of heap size increases, before we assume a memory leak.
 			# @parameter [Integer] The process ID to monitor.
 			def initialize(process_id = Process.pid, maximum: nil, threshold: DEFAULT_THRESHOLD, limit: DEFAULT_LIMIT)
@@ -76,10 +76,10 @@ module Memory
 			#
 			# Even thought the absolute value of this number may not very useful, the relative change is useful for detecting memory leaks, and it works on most platforms.
 			#
-			# @returns [Numeric] Memory usage size in KiB.
+			# @returns [Numeric] Memory usage size in bytes.
 			private def memory_usage
 				IO.popen(["ps", "-o", "rss=", @process_id.to_s]) do |io|
-					return Integer(io.readlines.last)
+					return Integer(io.readlines.last) * 1024
 				end
 			end
 			
