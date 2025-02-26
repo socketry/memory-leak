@@ -12,7 +12,7 @@ module Memory
 				@io = IO.popen(["ruby", File.expand_path("leaking_child.rb", __dir__)], "r+")
 			end
 			
-			def pid
+			def process_id
 				@io.pid
 			end
 			

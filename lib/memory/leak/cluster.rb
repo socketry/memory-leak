@@ -18,42 +18,42 @@ module Memory
 			def initialize(limit: nil)
 				@limit = limit
 				
-				@pids = {}
+				@processes = {}
 			end
 			
 			# @attribute [Numeric | Nil] The memory limit for the cluster.
 			attr_accessor :limit
 			
-			# @attribute [Hash(PID, Monitor)] The process IDs and monitors in the cluster.
-			attr :pids
+			# @attribute [Hash(Integer, Monitor)] The process IDs and monitors in the cluster.
+			attr :processes
 			
 			# Add a new process ID to the cluster.
-			def add(pid, **options)
-				@pids[pid] = Monitor.new(pid, **options)
+			def add(process_id, **options)
+				@processes[process_id] = Monitor.new(process_id, **options)
 			end
 			
 			# Remove a process ID from the cluster.
-			def remove(pid)
-				@pids.delete(pid)
+			def remove(process_id)
+				@processes.delete(process_id)
 			end
 			
-			# Apply the memory limit to the cluster. If the total memory usage exceeds the limit, yields each PID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
+			# Apply the memory limit to the cluster. If the total memory usage exceeds the limit, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
 			#
-			# @yields {|pid, monitor| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
+			# @yields {|process_id, monitor| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
 			def apply_limit!(limit = @limit)
-				total = @pids.values.map(&:current).sum
+				total = @processes.values.map(&:current).sum
 				
 				if total > limit
 					Console.warn(self, "Total memory usage exceeded limit.", total: total, limit: limit)
 				end
 				
-				sorted = @pids.sort_by do |pid, monitor|
+				sorted = @processes.sort_by do |process_id, monitor|
 					-monitor.current
 				end
 				
-				sorted.each do |pid, monitor|
+				sorted.each do |process_id, monitor|
 					if total > limit
-						if yield pid, monitor, total
+						if yield process_id, monitor, total
 							total -= monitor.current
 						end
 					else
@@ -64,17 +64,17 @@ module Memory
 			
 			# Check all processes in the cluster for memory leaks.
 			#
-			# @yields {|pid, monitor| ...} each process ID and monitor that is leaking or exceeds the memory limit.
+			# @yields {|process_id, monitor| ...} each process ID and monitor that is leaking or exceeds the memory limit.
 			def check!(&block)
 				leaking = []
 				
-				@pids.each do |pid, monitor|
+				@processes.each do |process_id, monitor|
 					monitor.sample!
 					
 					if monitor.leaking?
-						Console.debug(self, "Memory Leak Detected!", pid: pid, monitor: monitor)
+						Console.debug(self, "Memory Leak Detected!", process_id: process_id, monitor: monitor)
 						
-						leaking << [pid, monitor]
+						leaking << [process_id, monitor]
 					end
 				end
 				

@@ -17,9 +17,9 @@ describe Memory::Leak::Cluster do
 		before do
 			@children = 3.times.map do
 				child = Memory::Leak::LeakingChild.new
-				monitor = cluster.add(child.pid, limit: 10)
+				monitor = cluster.add(child.process_id, limit: 10)
 				
-				[child.pid, child]
+				[child.process_id, child]
 			end.to_h
 		end
 		
@@ -33,7 +33,7 @@ describe Memory::Leak::Cluster do
 		
 		it "can detect memory leaks" do
 			child = children.values.first
-			monitor = cluster.pids[child.pid]
+			monitor = cluster.processes[child.process_id]
 			
 			# Force the first child to trigger the memory leak:
 			until monitor.leaking?
@@ -44,17 +44,17 @@ describe Memory::Leak::Cluster do
 				monitor.sample!
 			end
 			
-			cluster.check! do |pid, monitor|
-				expect(pid).to be == child.pid
+			cluster.check! do |process_id, monitor|
+				expect(process_id).to be == child.process_id
 				expect(monitor.count).to be == monitor.limit
 				expect(monitor).to be(:leaking?)
 				
 				child.close
-				children.delete(pid)
-				cluster.remove(pid)
+				children.delete(process_id)
+				cluster.remove(process_id)
 			end
 			
-			expect(cluster.pids.keys).to be == children.keys
+			expect(cluster.processes.keys).to be == children.keys
 		ensure
 			children.each_value do |child|
 				child.close
@@ -66,9 +66,9 @@ describe Memory::Leak::Cluster do
 			cluster.limit = 1024*100
 			
 			big_child = children.values.first
-			big_monitor = cluster.pids[big_child.pid]
+			big_monitor = cluster.processes[big_child.process_id]
 			small_child = children.values.last
-			small_monitor = cluster.pids[small_child.pid]
+			small_monitor = cluster.processes[small_child.process_id]
 			
 			big_allocation = (cluster.limit * 0.8 * 1024).floor - big_monitor.current
 			if big_allocation > 0
@@ -83,15 +83,15 @@ describe Memory::Leak::Cluster do
 			end
 			
 			# The total memory usage is 110% of the limit, so the biggest child should be terminated:
-			cluster.check! do |pid, monitor, total|
-				# $stderr.puts "Checking PID: #{pid}, current: #{monitor.current} KiB (total: #{total} KiB / #{cluster.limit} KiB)"
+			cluster.check! do |process_id, monitor, total|
+				# $stderr.puts "Checking process_id: #{process_id}, current: #{monitor.current} KiB (total: #{total} KiB / #{cluster.limit} KiB)"
 				
-				expect(pid).to be == big_child.pid
+				expect(process_id).to be == big_child.process_id
 				expect(monitor).not.to be(:leaking?)
 				
 				big_child.close
-				children.delete(pid)
-				cluster.remove(pid)
+				children.delete(process_id)
+				cluster.remove(process_id)
 				
 				true
 			end

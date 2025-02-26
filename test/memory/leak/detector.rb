@@ -22,7 +22,7 @@ describe Memory::Leak::Monitor do
 		
 		with "a leaking child process" do
 			include_context Memory::Leak::ALeakingProcess
-			let(:monitor) {subject.new(@child.pid, limit: 10)}
+			let(:monitor) {subject.new(@child.process_id, limit: 10)}
 			
 			it "can detect memory leaks" do
 				@child.wait_for_message("ready")

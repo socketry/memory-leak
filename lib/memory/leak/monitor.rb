@@ -27,9 +27,9 @@ module Memory
 			# @parameter maximum [Numeric] The initial maximum heap size, from which we willl track increases, in KiB.
 			# @parameter threshold [Numeric] The threshold for heap size increases, in KiB.
 			# @parameter limit [Numeric] The limit for the number of heap size increases, before we assume a memory leak.
-			# @pid [Integer] The process ID to monitor.
-			def initialize(pid = Process.pid, maximum: nil, threshold: DEFAULT_THRESHOLD, limit: DEFAULT_LIMIT)
-				@pid = pid
+			# @parameter [Integer] The process ID to monitor.
+			def initialize(process_id = Process.pid, maximum: nil, threshold: DEFAULT_THRESHOLD, limit: DEFAULT_LIMIT)
+				@process_id = process_id
 				
 				@maximum = maximum
 				@threshold = threshold
@@ -41,7 +41,7 @@ module Memory
 			end
 			
 			# @attribute [Integer] The process ID to monitor.
-			attr :pid
+			attr :process_id
 			
 			# @attribute [Numeric] The current maximum heap size.
 			attr :maximum
@@ -61,7 +61,7 @@ module Memory
 			#
 			# @returns [Numeric] Memory usage size in KiB.
 			private def memory_usage
-				IO.popen(["ps", "-o", "rss=", @pid.to_s]) do |io|
+				IO.popen(["ps", "-o", "rss=", @process_id.to_s]) do |io|
 					return Integer(io.readlines.last)
 				end
 			end
