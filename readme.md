@@ -12,6 +12,11 @@ Please see the [project documentation](https://socketry.github.io/memory-leak/) 
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.
 
+### v0.5.0
+
+  - Improved variable names.
+  - Added `maximum_size_limit` to process monitor.
+
 ### v0.1.0
 
   - Initial implementation.
