@@ -7,8 +7,10 @@ require "console"
 
 module Memory
 	module Leak
+		# System-specific memory information.
 		module System
 			if File.exist?("/proc/meminfo")
+				# @returns [Integer] The total memory size in bytes.
 				def self.total_memory_size
 					File.foreach("/proc/meminfo") do |line|
 						if /MemTotal:\s*(?<total>\d+)\s*kB/ =~ line
@@ -17,6 +19,7 @@ module Memory
 					end
 				end
 			elsif RUBY_PLATFORM =~ /darwin/
+				# @returns [Integer] The total memory size in bytes.
 				def self.total_memory_size
 					IO.popen(["sysctl", "hw.memsize"], "r") do |io|
 						io.each_line do |line|

@@ -78,6 +78,7 @@ module Memory
 			# @attribute [Numeric] The limit for the number of process size increases, before we assume a memory leak.
 			attr_accessor :increase_limit
 			
+			# @returns [Integer] Ask the system for the current memory usage.
 			def memory_usage
 				System.memory_usage(@process_id)
 			end
