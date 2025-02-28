@@ -23,6 +23,13 @@ describe Memory::Leak::System do
 	end
 	
 	with ".memory_usages" do
+		it "can determine the memory usages of no processes" do
+			result = subject.memory_usages([])
+			
+			expect(result).to be_a(Enumerator)
+			expect(result.to_a).to be(:empty?)
+		end
+		
 		it "can determine the memory usages" do
 			pids = 3.times.map{Process.spawn("sleep 1")}
 			

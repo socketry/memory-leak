@@ -38,9 +38,11 @@ module Memory
 			def self.memory_usages(process_ids)
 				return to_enum(__method__, process_ids) unless block_given?
 				
-				IO.popen(["ps", "-o", "pid=,rss=", "-p", process_ids.join(",")]) do |io|
-					io.each_line.map(&:split).each do |process_id, size|
-						yield process_id.to_i, size.to_i * 1024
+				if process_ids.any?
+					IO.popen(["ps", "-o", "pid=,rss=", "-p", process_ids.join(",")]) do |io|
+						io.each_line.map(&:split).each do |process_id, size|
+							yield process_id.to_i, size.to_i * 1024
+						end
 					end
 				end
 			end
