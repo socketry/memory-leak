@@ -85,8 +85,10 @@ module Memory
 			
 			# Sample the memory usage of all processes in the cluster.
 			def sample!
-				System.memory_usages(@processes.keys).each do |process_id, memory_usage|
-					@processes[process_id].current_size = memory_usage
+				System.memory_usages(@processes.keys) do |process_id, memory_usage|
+					if monitor = @processes[process_id]
+						monitor.current_size = memory_usage
+					end
 				end
 			end
 			

@@ -24,18 +24,24 @@ describe Memory::Leak::System do
 	
 	with ".memory_usages" do
 		it "can determine the memory usages" do
-			result = subject.memory_usages([Process.pid])
-			expect(result).to be_a(Array)
+			pids = 3.times.map{Process.spawn("sleep 1")}
+			
+			result = subject.memory_usages(pids)
 			
 			result.each do |process_id, size|
+				expect(pids).to be(:include?, process_id)
 				expect(process_id).to be_a(Integer)
 				expect(size).to be_a(Integer)
+			end
+		ensure
+			pids.each do |pid|
+				Process.kill(:TERM, pid)
+				Process.wait(pid)
 			end
 		end
 		
 		it "ignores invalid process IDs" do
 			result = subject.memory_usages([Process.pid, 0])
-			expect(result).to be_a(Array)
 			
 			result.each do |process_id, size|
 				expect(process_id).to be_a(Integer)
