@@ -17,32 +17,32 @@ describe Memory::Leak::Monitor do
 			
 			# It is very unlikely that in the above test, the threshold of the 2nd and 3rd samples will be greater than the threshold of the 1st sample.
 			# Therefore, the count should be 0.
-			expect(monitor.count).to be == 0
+			expect(monitor.increase_count).to be == 0
 		end
 		
 		with "a leaking child process" do
 			include_context Memory::Leak::ALeakingProcess
-			let(:monitor) {subject.new(@child.process_id, limit: 10)}
+			let(:monitor) {subject.new(@child.process_id, increase_limit: 10)}
 			
 			it "can detect memory leaks" do
 				@child.wait_for_message("ready")
 				
 				# The child process may have an initial heap which allocations will use up before the heap is increased, so we need to consume that first:
-				until monitor.count > 0
-					@child.write_message(action: "allocate", size: monitor.threshold)
+				until monitor.increase_count > 0
+					@child.write_message(action: "allocate", size: monitor.threshold_size)
 					@child.wait_for_message("allocated")
 					monitor.sample!
 				end
 				
 				until monitor.leaking?
-					@child.write_message(action: "allocate", size: monitor.threshold + 1)
+					@child.write_message(action: "allocate", size: monitor.threshold_size + 1)
 					@child.wait_for_message("allocated")
 					
 					# Capture a sample of the memory usage:
 					monitor.sample!
 				end
 				
-				expect(monitor.count).to be == monitor.limit
+				expect(monitor.increase_count).to be == monitor.increase_limit
 				expect(monitor).to be(:leaking?)
 			end
 		end

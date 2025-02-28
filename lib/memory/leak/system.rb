@@ -29,6 +29,26 @@ module Memory
 					end
 				end
 			end
+			
+			# Get the memory usage of the given process IDs.
+			#
+			# @parameter process_ids [Array(Integer)] The process IDs to monitor.
+			# @returns [Array(Tuple(Integer, Integer))] The memory usage of the given process IDs.
+			def self.memory_usages(process_ids)
+				IO.popen(["ps", "-o", "pid=,rss=", *process_ids.map(&:to_s)]) do |io|
+					io.each_line.map(&:split).map{|process_id, size| [process_id.to_i, size.to_i * 1024]}
+				end
+			end
+			
+			# Get the memory usage of the given process IDs.
+			#
+			# @parameter process_ids [Array(Integer)] The process IDs to monitor.
+			# @returns [Array(Tuple(Integer, Integer))] The memory usage of the given process IDs.
+			def self.memory_usage(process_id)
+				IO.popen(["ps", "-o", "rss=", process_id.to_s]) do |io|
+					return io.read.to_i * 1024
+				end
+			end
 		end
 	end
 end

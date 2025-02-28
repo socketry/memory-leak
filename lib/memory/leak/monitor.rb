@@ -7,48 +7,50 @@ require "console"
 
 module Memory
 	module Leak
-		# Detects memory leaks by tracking heap size increases.
+		# Detects memory leaks by tracking process size increases.
 		#
 		# A memory leak is characterised by the memory usage of the application continuing to rise over time. We can detect this by sampling memory usage and comparing it to the previous sample. If the memory usage is higher than the previous sample, we can say that the application has allocated more memory. Eventually we expect to see this stabilize, but if it continues to rise, we can say that the application has a memory leak.
 		#
 		# We should be careful not to filter historical data, as some memory leaks may only become apparent after a long period of time. Any kind of filtering may prevent us from detecting such a leak.
 		class Monitor
-			# We only track heap size changes greater than this threshold, across the DEFAULT_INTERVAL.
-			# True memory leaks will eventually hit this threshold, while small fluctuations will not.
-			DEFAULT_THRESHOLD = 1024*1024*10
+			# We only track process size changes greater than this threshold_size, across the DEFAULT_INTERVAL.
+			# True memory leaks will eventually hit this threshold_size, while small fluctuations will not.
+			DEFAULT_THRESHOLD_SIZE = 1024*1024*10
 			
-			# We track the last N heap size increases.
-			# If the heap size is not stabilizing within the specified limit, we can assume there is a leak.
-			# With a default interval of 10 seconds, this will track the last ~3 minutes of heap size increases.
-			DEFAULT_LIMIT = 20
+			# We track the last N process size increases.
+			# If the process size is not stabilizing within the specified increase_limit, we can assume there is a leak.
+			# With a default interval of 10 seconds, this will track the last ~3 minutes of process size increases.
+			DEFAULT_INCREASE_LIMIT = 20
 			
 			# Create a new monitor.
 			#
-			# @parameter maximum [Numeric] The initial maximum heap size, from which we willl track increases, in bytes.
-			# @parameter threshold [Numeric] The threshold for heap size increases, in bytes.
-			# @parameter limit [Numeric] The limit for the number of heap size increases, before we assume a memory leak.
-			# @parameter [Integer] The process ID to monitor.
-			def initialize(process_id = Process.pid, maximum: nil, threshold: DEFAULT_THRESHOLD, limit: DEFAULT_LIMIT)
+			# @parameter process_id [Integer] The process ID to monitor.
+			# @parameter maximum_size [Numeric] The initial process size, from which we willl track increases, in bytes.
+			# @parameter maximum_size_limit [Numeric | Nil] The maximum process size allowed, in bytes, before we assume a memory leak.
+			# @parameter threshold_size [Numeric] The threshold for process size increases, in bytes.
+			# @parameter increase_limit [Numeric] The limit for the number of process size increases, before we assume a memory leak.
+			def initialize(process_id = Process.pid, maximum_size: nil, maximum_size_limit: nil, threshold_size: DEFAULT_THRESHOLD_SIZE, increase_limit: DEFAULT_INCREASE_LIMIT)
 				@process_id = process_id
 				
-				@maximum = maximum
-				@threshold = threshold
-				@limit = limit
+				@current_size = nil
+				@maximum_size = maximum_size
+				@maximum_size_limit = maximum_size_limit
 				
-				# The number of increasing heap size samples.
-				@count = 0
-				@current = nil
+				@threshold_size = threshold_size
+				@increase_count = 0
+				@increase_limit = increase_limit
 			end
 			
 			# @returns [Hash] A serializable representation of the cluster.
 			def as_json(...)
 				{
 					process_id: @process_id,
-					current: @current,
-					maximum: @maximum,
-					threshold: @threshold,
-					limit: @limit,
-					count: @count,
+					current_size: @current_size,
+					maximum_size: @maximum_size,
+					maximum_size_limit: @maximum_size_limit,
+					threshold_size: @threshold_size,
+					increase_count: @increase_count,
+					increase_limit: @increase_limit,
 				}
 			end
 			
@@ -60,65 +62,80 @@ module Memory
 			# @attribute [Integer] The process ID to monitor.
 			attr :process_id
 			
-			# @attribute [Numeric] The current maximum heap size.
-			attr :maximum
+			# @attribute [Numeric] The maximum process size observed.
+			attr_accessor :maximum_size
 			
-			# @attribute [Numeric] The threshold for heap size increases.
-			attr :threshold
+			# @attribute [Numeric | Nil] The maximum process size allowed, before we assume a memory leak.
+			attr_accessor :maximum_size_limit
 			
-			# @attribute [Numeric] The limit for the number of heap size increases, before we assume a memory leak.
-			attr :limit
+			# @attribute [Numeric] The threshold_size for process size increases.
+			attr_accessor :threshold_size
 			
-			# @attribute [Integer] The number of increasing heap size samples. 
-			attr :count
+			# @attribute [Integer] The number of increasing process size samples. 
+			attr_accessor :increase_count
 			
-			# The current resident set size (RSS) of the process.
-			#
-			# Even thought the absolute value of this number may not very useful, the relative change is useful for detecting memory leaks, and it works on most platforms.
-			#
-			# @returns [Numeric] Memory usage size in bytes.
-			private def memory_usage
-				IO.popen(["ps", "-o", "rss=", @process_id.to_s]) do |io|
-					return Integer(io.readlines.last) * 1024
-				end
+			# @attribute [Numeric] The limit for the number of process size increases, before we assume a memory leak.
+			attr_accessor :increase_limit
+			
+			def memory_usage
+				System.memory_usage(@process_id)
 			end
 			
 			# @returns [Integer] The last sampled memory usage.
-			def current
-				@current ||= memory_usage
+			def current_size
+				@current_size ||= memory_usage
+			end
+			
+			# Set the current memory usage, rather than sampling it.
+			def current_size=(value)
+				@current_size = value
 			end
 			
 			# Indicates whether a memory leak has been detected.
 			#
-			# If the number of increasing heap size samples is greater than or equal to the limit, a memory leak is assumed.
+			# If the number of increasing heap size samples is greater than or equal to the increase_limit, a memory leak is assumed.
+			#
+			# @returns [Boolean] True if a memory leak has been detected.
+			def increase_limit_exceeded?
+				@increase_count >= @increase_limit
+			end
+			
+			# Indicates that the current memory usage has grown beyond the maximum size limit.
+			#
+			# @returns [Boolean] True if the current memory usage has grown beyond the maximum size limit.
+			def maximum_size_limit_exceeded?
+				@maximum_size_limit && self.current_size > @maximum_size_limit
+			end
+			
+			# Indicates whether a memory leak has been detected.
 			#
 			# @returns [Boolean] True if a memory leak has been detected.
 			def leaking?
-				@count >= @limit
+				increase_limit_exceeded? || maximum_size_limit_exceeded?
 			end
 			
 			# Capture a memory usage sample and yield if a memory leak is detected.
 			#
 			# @yields {|sample, monitor| ...} If a memory leak is detected.
 			def sample!
-				@current = memory_usage
+				self.current_size = memory_usage
 				
-				if @maximum
-					delta = @current - @maximum
-					Console.debug(self, "Heap size captured.", current: @current, delta: delta, threshold: @threshold, maximum: @maximum)
+				if @maximum_observed_size
+					delta = @current_size - @maximum_observed_size
+					Console.debug(self, "Heap size captured.", current_size: @current_size, delta: delta, threshold_size: @threshold_size, maximum_observed_size: @maximum_observed_size)
 					
-					if delta > @threshold
-						@maximum = @current
-						@count += 1
+					if delta > @threshold_size
+						@maximum_observed_size = @current_size
+						@increase_count += 1
 						
-						Console.debug(self, "Heap size increased.", maximum: @maximum, count: @count)
+						Console.debug(self, "Heap size increased.", maximum_observed_size: @maximum_observed_size, count: @count)
 					end
 				else
-					Console.debug(self, "Initial heap size captured.", current: @current)
-					@maximum = @current
+					Console.debug(self, "Initial heap size captured.", current_size: @current_size)
+					@maximum_observed_size = @current_size
 				end
 				
-				return @current
+				return @current_size
 			end
 		end
 	end
