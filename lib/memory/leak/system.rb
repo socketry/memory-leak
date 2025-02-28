@@ -15,8 +15,6 @@ module Memory
 							return total.to_i * 1024
 						end
 					end
-					
-					return nil
 				end
 			elsif RUBY_PLATFORM =~ /darwin/
 				def self.total_memory_size

@@ -13,6 +13,20 @@ describe Memory::Leak::Cluster do
 	
 	let(:cluster) {subject.new}
 	
+	with "#as_json" do
+		it "generates a JSON representation" do
+			expect(cluster.as_json).to have_keys(
+				processes: be_a(Hash),
+				total_size: be_nil,
+				total_size_limit: be_nil,
+			)
+		end
+		
+		it "generates a JSON string" do
+			expect(JSON.dump(cluster)).to be == cluster.to_json
+		end
+	end
+	
 	with "a leaking child process" do
 		before do
 			@children = 3.times.map do
@@ -64,6 +78,8 @@ describe Memory::Leak::Cluster do
 		it "can apply memory limit" do
 			# 100 MiB limit:
 			cluster.total_size_limit = 1024*1024*100
+			
+			expect(cluster.check!.to_a).to be(:empty?)
 			
 			big_child = children.values.first
 			big_monitor = cluster.processes[big_child.process_id]

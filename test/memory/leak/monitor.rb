@@ -9,6 +9,24 @@ require "memory/leak/a_leaking_process"
 describe Memory::Leak::Monitor do
 	let(:monitor) {subject.new}
 	
+	with "#as_json" do
+		it "generates a JSON representation" do
+			expect(monitor.as_json).to have_keys(
+				process_id: be_a(Integer),
+				current_size: be_nil,
+				maximum_size: be_nil,
+				maximum_size_limit: be_nil,
+				threshold_size: be_a(Integer),
+				increase_count: be == 0,
+				increase_limit: be_a(Integer)
+			)
+		end
+		
+		it "generates a JSON string" do
+			expect(JSON.dump(monitor)).to be == monitor.to_json
+		end
+	end
+	
 	with "#sample!" do
 		it "can capture samples" do
 			3.times do

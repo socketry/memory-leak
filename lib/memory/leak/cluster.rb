@@ -94,6 +94,8 @@ module Memory
 			#
 			# @yields {|process_id, monitor| ...} each process ID and monitor that is leaking or exceeds the memory limit.
 			def check!(&block)
+				return to_enum(__method__) unless block_given?
+				
 				self.sample!
 				
 				leaking = []

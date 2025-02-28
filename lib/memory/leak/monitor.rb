@@ -4,6 +4,7 @@
 # Copyright, 2025, by Samuel Williams.
 
 require "console"
+require_relative "system"
 
 module Memory
 	module Leak
