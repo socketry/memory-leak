@@ -33,9 +33,11 @@ module Memory
 			def initialize(process_id = Process.pid, maximum_size: nil, maximum_size_limit: nil, threshold_size: DEFAULT_THRESHOLD_SIZE, increase_limit: DEFAULT_INCREASE_LIMIT)
 				@process_id = process_id
 				
+				@sample_count = 0
 				@current_size = nil
 				@maximum_size = maximum_size
 				@maximum_size_limit = maximum_size_limit
+				@maximum_observed_size = nil
 				
 				@threshold_size = threshold_size
 				@increase_count = 0
@@ -46,6 +48,7 @@ module Memory
 			def as_json(...)
 				{
 					process_id: @process_id,
+					sample_count: @sample_count,
 					current_size: @current_size,
 					maximum_size: @maximum_size,
 					maximum_size_limit: @maximum_size_limit,
@@ -83,6 +86,9 @@ module Memory
 				System.memory_usage(@process_id)
 			end
 			
+			# @attribute [Integer] The number of samples taken.
+			attr :sample_count
+			
 			# @returns [Integer] The last sampled memory usage.
 			def current_size
 				@current_size ||= memory_usage
@@ -119,7 +125,9 @@ module Memory
 			# Capture a memory usage sample and yield if a memory leak is detected.
 			#
 			# @yields {|sample, monitor| ...} If a memory leak is detected.
-			def sample!
+			def sample!(memory_usage = self.memory_usage)
+				@sample_count += 1
+				
 				self.current_size = memory_usage
 				
 				if @maximum_observed_size
