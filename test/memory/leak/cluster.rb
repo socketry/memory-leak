@@ -45,6 +45,18 @@ describe Memory::Leak::Cluster do
 		
 		attr :children
 		
+		it "samples memory usage" do
+			cluster.check!.to_a
+			
+			children.each do |process_id, child|
+				monitor = cluster.processes[process_id]
+				expect(monitor).to have_attributes(
+					sample_count: be > 0,
+					current_size: be_a(Integer),
+				)
+			end
+		end
+		
 		it "can detect memory leaks" do
 			child = children.values.first
 			monitor = cluster.processes[child.process_id]
@@ -57,6 +69,10 @@ describe Memory::Leak::Cluster do
 				# Capture a sample of the memory usage:
 				monitor.sample!
 			end
+			
+			expect(monitor).to have_attributes(
+				sample_count: be > 0,
+			)
 			
 			cluster.check! do |process_id, monitor|
 				expect(process_id).to be == child.process_id

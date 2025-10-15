@@ -87,7 +87,7 @@ module Memory
 			def sample!
 				System.memory_usages(@processes.keys) do |process_id, memory_usage|
 					if monitor = @processes[process_id]
-						monitor.current_size = memory_usage
+						monitor.sample!(memory_usage)
 					end
 				end
 			end
@@ -96,8 +96,6 @@ module Memory
 			#
 			# @yields {|process_id, monitor| ...} each process ID and monitor that is leaking or exceeds the memory limit.
 			def check!(&block)
-				return to_enum(__method__) unless block_given?
-				
 				self.sample!
 				
 				leaking = []
@@ -110,10 +108,14 @@ module Memory
 					end
 				end
 				
-				leaking.each(&block)
+				if block_given?
+					leaking.each(&block)
+				end
 				
 				# Finally, apply any per-cluster memory limits:
 				apply_limit!(@total_size_limit, &block) if @total_size_limit
+				
+				return leaking
 			end
 		end
 	end

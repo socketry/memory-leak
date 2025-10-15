@@ -36,6 +36,7 @@ describe Memory::Leak::Monitor do
 			# It is very unlikely that in the above test, the threshold of the 2nd and 3rd samples will be greater than the threshold of the 1st sample.
 			# Therefore, the count should be 0.
 			expect(monitor.increase_count).to be == 0
+			expect(monitor.sample_count).to be == 3
 		end
 		
 		with "a leaking child process" do
