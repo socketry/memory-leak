@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.6.0
 
   - Added `sample_count` attribute to monitor to track number of samples taken.
   - `check!` method in cluster now returns an array of leaking monitors if no block is given.
