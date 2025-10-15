@@ -19,7 +19,7 @@ end
 
 begin
 	write_message(action: "ready")
-
+	
 	allocations = []
 	while message = read_message
 		case message[:action]
