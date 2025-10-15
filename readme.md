@@ -12,6 +12,10 @@ Please see the [project documentation](https://socketry.github.io/memory-leak/) 
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.
 
+### v0.7.0
+
+  - Make both `increase_limit` and `maximum_size_limit` optional (if `nil`).
+
 ### v0.6.0
 
   - Added `sample_count` attribute to monitor to track number of samples taken.

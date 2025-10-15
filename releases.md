@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.7.0
 
   - Make both `increase_limit` and `maximum_size_limit` optional (if `nil`).
 
