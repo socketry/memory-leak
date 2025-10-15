@@ -1,5 +1,9 @@
 # Releases
 
+## Unreleased
+
+  - Make both `increase_limit` and `maximum_size_limit` optional (if `nil`).
+
 ## v0.6.0
 
   - Added `sample_count` attribute to monitor to track number of samples taken.

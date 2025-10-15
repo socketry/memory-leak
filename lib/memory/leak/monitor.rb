@@ -105,14 +105,18 @@ module Memory
 			#
 			# @returns [Boolean] True if a memory leak has been detected.
 			def increase_limit_exceeded?
-				@increase_count >= @increase_limit
+				if @increase_limit
+					@increase_count >= @increase_limit
+				end
 			end
 			
 			# Indicates that the current memory usage has grown beyond the maximum size limit.
 			#
 			# @returns [Boolean] True if the current memory usage has grown beyond the maximum size limit.
 			def maximum_size_limit_exceeded?
-				@maximum_size_limit && self.current_size > @maximum_size_limit
+				if @maximum_size_limit
+					self.current_size > @maximum_size_limit
+				end
 			end
 			
 			# Indicates whether a memory leak has been detected.

@@ -65,5 +65,26 @@ describe Memory::Leak::Monitor do
 				expect(monitor).to be(:leaking?)
 			end
 		end
+		
+		with "maximum_size_limit" do
+			let(:monitor) {subject.new(Process.pid, maximum_size_limit: 1024)}
+			
+			it "detects leak when maximum_size_limit is exceeded" do
+				expect(monitor).to have_attributes(
+					maximum_size_limit: be == 1024,
+				)
+				
+				# Simulate a memory sample below the limit
+				monitor.current_size = 512
+				expect(monitor).not.to be(:leaking?)
+				expect(monitor).not.to be(:increase_limit_exceeded?)
+				
+				# Simulate a memory sample above the limit
+				monitor.current_size = 2048
+				expect(monitor).to be(:leaking?)
+				expect(monitor).to be(:maximum_size_limit_exceeded?)
+				expect(monitor).not.to be(:increase_limit_exceeded?)
+			end
+		end
 	end
 end
