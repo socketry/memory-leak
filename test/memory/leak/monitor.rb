@@ -14,6 +14,8 @@ describe Memory::Leak::Monitor do
 			expect(monitor.as_json).to have_keys(
 				process_id: be_a(Integer),
 				current_size: be_nil,
+				current_shared_size: be_nil,
+				current_private_size: be_nil,
 				maximum_size: be_nil,
 				maximum_size_limit: be_nil,
 				threshold_size: be_a(Integer),

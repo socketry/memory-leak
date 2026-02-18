@@ -4,7 +4,7 @@
 # Copyright, 2025, by Samuel Williams.
 
 require "console"
-require_relative "system"
+require "process/metrics/memory"
 
 module Memory
 	module Leak
@@ -35,6 +35,8 @@ module Memory
 				
 				@sample_count = 0
 				@current_size = nil
+				@current_shared_size = nil
+				@current_private_size = nil
 				@maximum_size = maximum_size
 				@maximum_size_limit = maximum_size_limit
 				@maximum_observed_size = nil
@@ -50,6 +52,8 @@ module Memory
 					process_id: @process_id,
 					sample_count: @sample_count,
 					current_size: @current_size,
+					current_shared_size: @current_shared_size,
+					current_private_size: @current_private_size,
 					maximum_size: @maximum_size,
 					maximum_size_limit: @maximum_size_limit,
 					threshold_size: @threshold_size,
@@ -81,9 +85,19 @@ module Memory
 			# @attribute [Numeric] The limit for the number of process size increases, before we assume a memory leak.
 			attr_accessor :increase_limit
 			
+			# @attribute [Integer] The last sampled shared memory size in bytes.
+			attr_accessor :current_shared_size
+			
+			# @attribute [Integer] The last sampled private memory size in bytes.
+			attr_accessor :current_private_size
+			
 			# @returns [Integer] Ask the system for the current memory usage.
 			def memory_usage
-				System.memory_usage(@process_id)
+				if metrics = Process::Metrics::Memory.capture(@process_id, faults: false)
+					return metrics.resident_size
+				else
+					return 0
+				end
 			end
 			
 			# @attribute [Integer] The number of samples taken.
@@ -129,10 +143,19 @@ module Memory
 			# Capture a memory usage sample and yield if a memory leak is detected.
 			#
 			# @yields {|sample, monitor| ...} If a memory leak is detected.
-			def sample!(memory_usage = self.memory_usage)
+			def sample!
 				@sample_count += 1
 				
-				self.current_size = memory_usage
+				if metrics = Process::Metrics::Memory.capture(@process_id, faults: false)
+					self.current_size = metrics.resident_size
+					self.current_shared_size = metrics.shared_clean_size
+					self.current_private_size = metrics.private_clean_size + metrics.private_dirty_size
+				else
+					# Process doesn't exist or we can't access it - use fallback values
+					self.current_size = memory_usage
+					self.current_shared_size = 0
+					self.current_private_size = 0
+				end
 				
 				if @maximum_observed_size
 					delta = @current_size - @maximum_observed_size
@@ -142,7 +165,7 @@ module Memory
 						@maximum_observed_size = @current_size
 						@increase_count += 1
 						
-						Console.debug(self, "Heap size increased.", maximum_observed_size: @maximum_observed_size, count: @count)
+						Console.debug(self, "Heap size increased.", maximum_observed_size: @maximum_observed_size, count: @increase_count)
 					end
 				else
 					Console.debug(self, "Initial heap size captured.", current_size: @current_size)

@@ -114,15 +114,34 @@ describe Memory::Leak::Cluster do
 				small_child.wait_for_message("allocated")
 			end
 			
-			# The total memory usage is 110% of the limit, so the biggest child should be terminated:
+			# Sample to update memory stats after allocation:
+			cluster.sample!
+			
+			# Find the process with the largest private memory (this is what apply_limit! will terminate):
+			biggest_process_id, biggest_monitor = cluster.processes.max_by do |process_id, monitor|
+				monitor.current_private_size || 0
+			end
+			
+			# The total memory usage is 110% of the limit, so processes should be terminated:
+			terminated_processes = []
 			cluster.check! do |process_id, monitor, total_size|
-				expect(process_id).to be == big_child.process_id
+				# The first process yielded should be the one with the largest private memory:
+				if terminated_processes.empty?
+					expect(process_id).to be == biggest_process_id
+				end
 				expect(monitor).not.to be(:leaking?)
+				terminated_processes << process_id
 				
-				big_child.close
-				children.delete(process_id)
+				# Close the child process that was terminated:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
 				cluster.remove(process_id)
 			end
+			
+			# At least one process should have been terminated:
+			expect(terminated_processes.size).to be > 0
 			
 			expect_console.to have_logged(
 				severity: be == :warn,

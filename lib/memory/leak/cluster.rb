@@ -57,26 +57,46 @@ module Memory
 			
 			# Apply the memory limit to the cluster. If the total memory usage exceeds the limit, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
 			#
-			# @yields {|process_id, monitor| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
-			def apply_limit!(total_size_limit = @total_size_limit)
-				@total_size = @processes.values.map(&:current_size).sum
+			# Total cluster memory usage is calculated as: max(shared memory usages) + sum(private memory usages)
+			# This accounts for shared memory being counted only once across all processes.
+			#
+			# @parameter block [Proc] Required block to handle process termination.
+			# @yields {|process_id, monitor, total_size| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
+			# @raises [ArgumentError] if no block is provided.
+			protected def apply_limit!(total_size_limit = @total_size_limit, &block)
+				# Only processes with known private size can be considered:
+				monitors = @processes.values.select do |monitor|
+					monitor.current_private_size != nil
+				end
+				
+				maximum_shared_size = monitors.map(&:current_shared_size).max || 0
+				sum_private_size = monitors.map(&:current_private_size).sum
+				
+				@total_size = maximum_shared_size + sum_private_size
 				
 				if @total_size > total_size_limit
-					Console.warn(self, "Total memory usage exceeded limit.", total_size: @total_size, total_size_limit: total_size_limit)
+					Console.warn(self, "Total memory usage exceeded limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size)
 				else
 					return false
 				end
 				
-				sorted = @processes.sort_by do |process_id, monitor|
-					-monitor.current_size
+				# Only process monitors where we can compute private size:
+				monitors.sort_by! do |monitor|
+					-monitor.current_private_size
 				end
 				
-				sorted.each do |process_id, monitor|
+				monitors.each do |monitor|
 					if @total_size > total_size_limit
-						yield(process_id, monitor, @total_size)
+						# Capture values before yielding (process may be removed):
+						private_size = monitor.current_private_size
 						
-						# For the sake of the calculation, we assume that the process has been terminated:
-						@total_size -= monitor.current_size
+						yield(monitor.process_id, monitor, @total_size)
+						
+						# Incrementally update: subtract this process's contribution
+						sum_private_size -= private_size
+						
+						# We use the computed maximum shared size, even if it might not be correct, as it is good enough for enforcing the limits and recalculating it is non-trivial.
+						@total_size = maximum_shared_size + sum_private_size
 					else
 						break
 					end
@@ -85,11 +105,7 @@ module Memory
 			
 			# Sample the memory usage of all processes in the cluster.
 			def sample!
-				System.memory_usages(@processes.keys) do |process_id, memory_usage|
-					if monitor = @processes[process_id]
-						monitor.sample!(memory_usage)
-					end
-				end
+				@processes.each_value(&:sample!)
 			end
 			
 			# Check all processes in the cluster for memory leaks.
@@ -110,10 +126,12 @@ module Memory
 				
 				if block_given?
 					leaking.each(&block)
+					
+					# Finally, apply any per-cluster memory limits:
+					if @total_size_limit
+						apply_limit!(@total_size_limit, &block)
+					end
 				end
-				
-				# Finally, apply any per-cluster memory limits:
-				apply_limit!(@total_size_limit, &block) if @total_size_limit
 				
 				return leaking
 			end
