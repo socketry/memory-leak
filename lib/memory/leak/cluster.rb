@@ -77,6 +77,7 @@ module Memory
 				if @total_size > total_size_limit
 					Console.warn(self, "Total memory usage exceeded limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size)
 				else
+					Console.info(self, "Total memory usage within limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size)
 					return false
 				end
 				
