@@ -21,6 +21,13 @@ Please see the [project releases](https://socketry.github.io/memory-leak/release
   - Added `sample_count` attribute to monitor to track number of samples taken.
   - `check!` method in cluster now returns an array of leaking monitors if no block is given.
   - `Cluster#check!` now invokes `Monitor#sample!` to ensure memory usage is updated before checking for leaks.
+    \=======
+
+### v0.8.0
+
+  - `Memory::Leak::System.total_memory_size` now considers `cgroup` memory limits.
+
+> > > > > > > Stashed changes
 
 ### v0.5.0
 
