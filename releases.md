@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.9.0
 
   - Use `process-metrics` gem for accessing both private and shared memory where possible.
   - Better implementation of cluster `total_size_limit` that takes into account shared and private memory.
