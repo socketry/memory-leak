@@ -148,5 +148,91 @@ describe Memory::Leak::Cluster do
 				message: be == "Total memory usage exceeded limit."
 			)
 		end
+		
+		it "returns false when memory is within limit" do
+			# Set a very high limit that won't be exceeded:
+			cluster.total_size_limit = 1024*1024*1024*100 # 100 GB
+			
+			# Sample to get current memory stats:
+			cluster.sample!
+			
+			yielded = false
+			cluster.check! do |process_id, monitor, total_size|
+				yielded = true
+			end
+			
+			# No processes should be yielded since we're within the limit:
+			expect(yielded).to be == false
+			
+			expect_console.to have_logged(
+				severity: be == :info,
+				message: be == "Total memory usage within limit."
+			)
+		end
+		
+		it "stops terminating once memory drops below limit" do
+			# Sample to get initial memory stats:
+			cluster.sample!
+			
+			# Create a big size difference by allocating a lot in one process:
+			big_child = children.values[0]
+			medium_child = children.values[1]
+			small_child = children.values[2]
+			
+			big_monitor = cluster.processes[big_child.process_id]
+			medium_monitor = cluster.processes[medium_child.process_id]
+			small_monitor = cluster.processes[small_child.process_id]
+			
+			# Allocate 40MB in the big child:
+			big_child.write_message(action: "allocate", size: 40*1024*1024)
+			big_child.wait_for_message("allocated")
+			
+			# Allocate 5MB in medium child:
+			medium_child.write_message(action: "allocate", size: 5*1024*1024)
+			medium_child.wait_for_message("allocated")
+			
+			# Don't allocate in small child
+			
+			# Sample to get updated stats:
+			cluster.sample!
+			
+			# Get the sizes:
+			max_shared = cluster.processes.values.map(&:current_shared_size).compact.max || 0
+			big_private = big_monitor.current_private_size || 0
+			medium_private = medium_monitor.current_private_size || 0
+			small_private = small_monitor.current_private_size || 0
+			sum_private = big_private + medium_private + small_private
+			
+			# Set limit between (max_shared + medium + small) and (max_shared + big + medium + small):
+			# This ensures removing big drops us below the limit
+			cluster.total_size_limit = max_shared + medium_private + small_private + (big_private / 2)
+			
+			# Verify we're over the limit initially:
+			current_total = max_shared + sum_private
+			expect(current_total).to be > cluster.total_size_limit
+			
+			# Save the big child's PID before we close it:
+			big_child_pid = big_child.process_id
+			
+			# Now check - should terminate the big child, then stop (break):
+			terminated_pids = []
+			cluster.check! do |process_id, monitor, total_size|
+				terminated_pids << process_id
+				
+				# Close and remove the process:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			# Should have terminated exactly the big child:
+			expect(terminated_pids.size).to be == 1
+			expect(terminated_pids).to be(:include?, big_child_pid)
+			
+			# Should have 2 processes remaining (break prevented terminating all):
+			expect(cluster.processes.size).to be == 2
+		end
 	end
 end

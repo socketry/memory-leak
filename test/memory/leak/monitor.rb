@@ -29,6 +29,16 @@ describe Memory::Leak::Monitor do
 		end
 	end
 	
+	with "#memory_usage" do
+		it "can get memory usage for current process" do
+			monitor = subject.new(Process.pid)
+			usage = monitor.memory_usage
+			
+			expect(usage).to be_a(Integer)
+			expect(usage).to be > 0
+		end
+	end
+	
 	with "#sample!" do
 		it "can capture samples" do
 			3.times do
@@ -87,6 +97,24 @@ describe Memory::Leak::Monitor do
 				expect(monitor).to be(:maximum_size_limit_exceeded?)
 				expect(monitor).not.to be(:increase_limit_exceeded?)
 			end
+		end
+	end
+	
+	with "non-existent process" do
+		let(:monitor) {subject.new(999999)} # Use a process ID that doesn't exist
+		
+		it "handles missing process gracefully in memory_usage" do
+			# Should return 0 for non-existent process:
+			expect(monitor.memory_usage).to be == 0
+		end
+		
+		it "handles missing process gracefully in sample!" do
+			# Should use fallback values when process doesn't exist:
+			monitor.sample!
+			
+			expect(monitor.current_shared_size).to be == 0
+			expect(monitor.current_private_size).to be == 0
+			expect(monitor.sample_count).to be == 1
 		end
 	end
 end
