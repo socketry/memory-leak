@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.9.2
 
   - Also log host memory in total memory usage logs.
 

@@ -12,6 +12,10 @@ Please see the [project documentation](https://socketry.github.io/memory-leak/) 
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.
 
+### v0.9.2
+
+  - Also log host memory in total memory usage logs.
+
 ### v0.9.0
 
   - Use `process-metrics` gem for accessing both private and shared memory where possible.
