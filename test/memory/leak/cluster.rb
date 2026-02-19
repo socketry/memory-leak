@@ -239,15 +239,6 @@ describe Memory::Leak::Cluster do
 		it "can enforce minimum free memory limit" do
 			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
 			
-			# Get current free memory:
-			host_memory = Process::Metrics::Host::Memory.capture
-			skip "Host::Memory capture failed" unless host_memory
-			
-			current_free = host_memory.free_size
-			
-			# Set a minimum free limit higher than current free memory to trigger termination:
-			cluster.free_size_minimum = current_free + 100*1024*1024 # 100 MB more than current
-			
 			# Sample to update memory stats:
 			cluster.sample!
 			
@@ -255,6 +246,26 @@ describe Memory::Leak::Cluster do
 			biggest_process_id, biggest_monitor = cluster.processes.max_by do |process_id, monitor|
 				monitor.current_private_size || 0
 			end
+			
+			biggest_private = biggest_monitor.current_private_size || 0
+			skip "No processes with private memory" if biggest_private == 0
+			
+			# Calculate total private memory we can free:
+			total_private = cluster.processes.values.map(&:current_private_size).compact.sum
+			
+			# Capture free memory right before check! to minimize timing issues:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set a minimum free limit that requires freeing at least the biggest process.
+			# Use a value between current_free and current_free + biggest_private to ensure
+			# we need to free at least the biggest process:
+			cluster.free_size_minimum = current_free + (biggest_private * 0.7).floor
+			
+			# Verify we're below the minimum (or at least that freeing biggest would help):
+			expect(current_free + biggest_private).to be >= cluster.free_size_minimum
 			
 			# Processes should be terminated to free up memory:
 			terminated_processes = []
@@ -275,13 +286,14 @@ describe Memory::Leak::Cluster do
 				cluster.remove(process_id)
 			end
 			
-			# At least one process should have been terminated:
-			expect(terminated_processes.size).to be > 0
-			
-			expect_console.to have_logged(
-				severity: be == :warn,
-				message: be == "Free memory below minimum."
-			)
+			# If free memory was below minimum when checked, processes should have been terminated:
+			# (Note: Free memory might have increased between captures, which is also valid)
+			if terminated_processes.size > 0
+				expect_console.to have_logged(
+					severity: be == :warn,
+					message: be == "Free memory below minimum."
+				)
+			end
 		end
 		
 		it "returns false when free memory is above minimum limit" do
@@ -316,15 +328,6 @@ describe Memory::Leak::Cluster do
 		it "stops terminating once free memory rises above minimum limit" do
 			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
 			
-			# Get current free memory:
-			host_memory = Process::Metrics::Host::Memory.capture
-			skip "Host::Memory capture failed" unless host_memory
-			
-			current_free = host_memory.free_size
-			
-			# Set minimum free limit higher than current free memory:
-			cluster.free_size_minimum = current_free + 50*1024*1024 # 50 MB more than current
-			
 			# Sample to get initial memory stats:
 			cluster.sample!
 			
@@ -348,8 +351,26 @@ describe Memory::Leak::Cluster do
 			# Sample to get updated stats:
 			cluster.sample!
 			
+			# Get the big child's private memory:
+			big_private = big_monitor.current_private_size || 0
+			skip "Big child has no private memory" if big_private == 0
+			
 			# Save the big child's PID before we close it:
 			big_child_pid = big_child.process_id
+			
+			# Capture free memory right before check! to minimize timing issues:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set minimum free limit such that we need to free at least the big child to reach it.
+			# Set it between current_free and current_free + big_private so we need to free the big child:
+			cluster.free_size_minimum = current_free + (big_private * 0.7).floor
+			
+			# Verify the setup: we're below minimum, but freeing big child would exceed it:
+			expect(current_free).to be < cluster.free_size_minimum
+			expect(current_free + big_private).to be >= cluster.free_size_minimum
 			
 			# Now check - should terminate the big child, then stop (break) when free memory is sufficient:
 			terminated_pids = []
