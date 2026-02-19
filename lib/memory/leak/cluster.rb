@@ -4,6 +4,7 @@
 # Copyright, 2025, by Samuel Williams.
 
 require "console"
+require "process/metrics/host/memory"
 require_relative "monitor"
 
 module Memory
@@ -74,10 +75,12 @@ module Memory
 				
 				@total_size = maximum_shared_size + sum_private_size
 				
+				host_memory = Process::Metrics::Host::Memory.capture
+				
 				if @total_size > total_size_limit
-					Console.warn(self, "Total memory usage exceeded limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size)
+					Console.warn(self, "Total memory usage exceeded limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size, host_memory: host_memory)
 				else
-					Console.info(self, "Total memory usage within limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size)
+					Console.info(self, "Total memory usage within limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size, host_memory: host_memory)
 					return false
 				end
 				

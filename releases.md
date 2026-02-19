@@ -1,5 +1,9 @@
 # Releases
 
+## Unreleased
+
+  - Also log host memory in total memory usage logs.
+
 ## v0.9.0
 
   - Use `process-metrics` gem for accessing both private and shared memory where possible.
