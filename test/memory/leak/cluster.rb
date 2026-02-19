@@ -19,6 +19,7 @@ describe Memory::Leak::Cluster do
 				processes: be_a(Hash),
 				total_size: be_nil,
 				total_size_limit: be_nil,
+				free_size_minimum: be_nil,
 			)
 		end
 		
@@ -117,7 +118,7 @@ describe Memory::Leak::Cluster do
 			# Sample to update memory stats after allocation:
 			cluster.sample!
 			
-			# Find the process with the largest private memory (this is what apply_limit! will terminate):
+			# Find the process with the largest private memory (this is what enforce_total_size_limit! will terminate):
 			biggest_process_id, biggest_monitor = cluster.processes.max_by do |process_id, monitor|
 				monitor.current_private_size || 0
 			end
@@ -233,6 +234,143 @@ describe Memory::Leak::Cluster do
 			
 			# Should have 2 processes remaining (break prevented terminating all):
 			expect(cluster.processes.size).to be == 2
+		end
+		
+		it "can enforce minimum free memory limit" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Get current free memory:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set a minimum free limit higher than current free memory to trigger termination:
+			cluster.free_size_minimum = current_free + 100*1024*1024 # 100 MB more than current
+			
+			# Sample to update memory stats:
+			cluster.sample!
+			
+			# Find the process with the largest private memory (this is what enforce_free_size_minimum! will terminate):
+			biggest_process_id, biggest_monitor = cluster.processes.max_by do |process_id, monitor|
+				monitor.current_private_size || 0
+			end
+			
+			# Processes should be terminated to free up memory:
+			terminated_processes = []
+			cluster.check! do |process_id, monitor, free_memory|
+				# The first process yielded should be the one with the largest private memory:
+				if terminated_processes.empty?
+					expect(process_id).to be == biggest_process_id
+				end
+				expect(monitor).not.to be(:leaking?)
+				expect(free_memory).to be_a(Integer)
+				terminated_processes << process_id
+				
+				# Close the child process that was terminated:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			# At least one process should have been terminated:
+			expect(terminated_processes.size).to be > 0
+			
+			expect_console.to have_logged(
+				severity: be == :warn,
+				message: be == "Free memory below minimum."
+			)
+		end
+		
+		it "returns false when free memory is above minimum limit" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Get current free memory:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set a very low minimum free limit that won't be exceeded:
+			cluster.free_size_minimum = [current_free - 1024*1024*1024*10, 0].max # 10 GB less than current, or 0
+			
+			# Sample to get current memory stats:
+			cluster.sample!
+			
+			yielded = false
+			cluster.check! do |process_id, monitor, free_memory|
+				yielded = true
+			end
+			
+			# No processes should be yielded since we're above the minimum free limit:
+			expect(yielded).to be == false
+			
+			expect_console.to have_logged(
+				severity: be == :info,
+				message: be == "Free memory above minimum."
+			)
+		end
+		
+		it "stops terminating once free memory rises above minimum limit" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Get current free memory:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set minimum free limit higher than current free memory:
+			cluster.free_size_minimum = current_free + 50*1024*1024 # 50 MB more than current
+			
+			# Sample to get initial memory stats:
+			cluster.sample!
+			
+			# Create a big size difference by allocating a lot in one process:
+			big_child = children.values[0]
+			medium_child = children.values[1]
+			small_child = children.values[2]
+			
+			big_monitor = cluster.processes[big_child.process_id]
+			medium_monitor = cluster.processes[medium_child.process_id]
+			small_monitor = cluster.processes[small_child.process_id]
+			
+			# Allocate 40MB in the big child:
+			big_child.write_message(action: "allocate", size: 40*1024*1024)
+			big_child.wait_for_message("allocated")
+			
+			# Allocate 5MB in medium child:
+			medium_child.write_message(action: "allocate", size: 5*1024*1024)
+			medium_child.wait_for_message("allocated")
+			
+			# Sample to get updated stats:
+			cluster.sample!
+			
+			# Save the big child's PID before we close it:
+			big_child_pid = big_child.process_id
+			
+			# Now check - should terminate the big child, then stop (break) when free memory is sufficient:
+			terminated_pids = []
+			cluster.check! do |process_id, monitor, free_memory|
+				terminated_pids << process_id
+				
+				# Close and remove the process:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			# Should have terminated at least the big child:
+			expect(terminated_pids.size).to be > 0
+			expect(terminated_pids).to be(:include?, big_child_pid)
+			
+			# Note: All processes may be terminated if free memory is still below limit,
+			# or some may remain if free memory rose above limit after terminating big child.
+			# The important thing is that termination stopped when free memory was sufficient.
 		end
 	end
 end

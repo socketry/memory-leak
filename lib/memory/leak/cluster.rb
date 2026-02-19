@@ -16,9 +16,11 @@ module Memory
 			# Create a new cluster.
 			#
 			# @parameter total_size_limit [Numeric | Nil] The total memory limit for the cluster.
-			def initialize(total_size_limit: nil)
+			# @parameter free_size_minimum [Numeric | Nil] The minimum free memory required on the host, in bytes.
+			def initialize(total_size_limit: nil, free_size_minimum: nil)
 				@total_size = nil
 				@total_size_limit = total_size_limit
+				@free_size_minimum = free_size_minimum
 				
 				@processes = {}
 			end
@@ -28,6 +30,7 @@ module Memory
 				{
 					total_size: @total_size,
 					total_size_limit: @total_size_limit,
+					free_size_minimum: @free_size_minimum,
 					processes: @processes.transform_values(&:as_json),
 				}
 			end
@@ -43,6 +46,9 @@ module Memory
 			# @attribute [Numeric | Nil] The total size limit for the cluster, in bytes, if which is exceeded, the cluster will terminate processes.
 			attr_accessor :total_size_limit
 			
+			# @attribute [Numeric | Nil] The minimum free memory required on the host, in bytes. If free memory falls below this minimum, the cluster will terminate processes.
+			attr_accessor :free_size_minimum
+			
 			# @attribute [Hash(Integer, Monitor)] The process IDs and monitors in the cluster.
 			attr :processes
 			
@@ -56,7 +62,7 @@ module Memory
 				@processes.delete(process_id)
 			end
 			
-			# Apply the memory limit to the cluster. If the total memory usage exceeds the limit, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
+			# Enforce the total size memory limit on the cluster. If the total memory usage exceeds the limit, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
 			#
 			# Total cluster memory usage is calculated as: max(shared memory usages) + sum(private memory usages)
 			# This accounts for shared memory being counted only once across all processes.
@@ -64,7 +70,7 @@ module Memory
 			# @parameter block [Proc] Required block to handle process termination.
 			# @yields {|process_id, monitor, total_size| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
 			# @raises [ArgumentError] if no block is provided.
-			protected def apply_limit!(total_size_limit = @total_size_limit, &block)
+			protected def enforce_total_size_limit!(total_size_limit = @total_size_limit, &block)
 				# Only processes with known private size can be considered:
 				monitors = @processes.values.select do |monitor|
 					monitor.current_private_size != nil
@@ -107,6 +113,57 @@ module Memory
 				end
 			end
 			
+			# Enforce the minimum free memory requirement. If free memory falls below the minimum, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
+			#
+			# @parameter block [Proc] Required block to handle process termination.
+			# @yields {|process_id, monitor, free_memory| ...} each process ID and monitor in order of maximum memory usage.
+			# @raises [ArgumentError] if no block is provided.
+			protected def enforce_free_size_minimum!(free_size_minimum = @free_size_minimum, &block)
+				return false unless free_size_minimum
+				
+				host_memory = Process::Metrics::Host::Memory.capture
+				return false unless host_memory
+				
+				free_memory = host_memory.free_size
+				
+				if free_memory < free_size_minimum
+					Console.warn(self, "Free memory below minimum.", free_memory: free_memory, free_size_minimum: free_size_minimum, host_memory: host_memory)
+				else
+					Console.info(self, "Free memory above minimum.", free_memory: free_memory, free_size_minimum: free_size_minimum, host_memory: host_memory)
+					return false
+				end
+				
+				# Only processes with known private size can be considered:
+				monitors = @processes.values.select do |monitor|
+					monitor.current_private_size != nil
+				end
+				
+				# Sort by private memory size (descending) to terminate largest processes first:
+				monitors.sort_by! do |monitor|
+					-monitor.current_private_size
+				end
+				
+				# Track how much private memory we've freed by terminating processes:
+				freed_private_size = 0
+				
+				monitors.each do |monitor|
+					# Calculate expected free memory after terminating this process:
+					expected_free_memory = free_memory + freed_private_size + monitor.current_private_size
+					
+					if expected_free_memory < free_size_minimum
+						# Capture private size before yielding (process may be removed):
+						private_size = monitor.current_private_size
+						
+						yield(monitor.process_id, monitor, free_memory + freed_private_size)
+						
+						# Incrementally track freed memory:
+						freed_private_size += private_size
+					else
+						break
+					end
+				end
+			end
+			
 			# Sample the memory usage of all processes in the cluster.
 			def sample!
 				@processes.each_value(&:sample!)
@@ -131,9 +188,14 @@ module Memory
 				if block_given?
 					leaking.each(&block)
 					
-					# Finally, apply any per-cluster memory limits:
+					# Finally, enforce any per-cluster memory limits:
 					if @total_size_limit
-						apply_limit!(@total_size_limit, &block)
+						enforce_total_size_limit!(@total_size_limit, &block)
+					end
+					
+					# Enforce minimum free memory requirement:
+					if @free_size_minimum
+						enforce_free_size_minimum!(@free_size_minimum, &block)
 					end
 				end
 				
