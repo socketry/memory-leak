@@ -167,12 +167,12 @@ module Memory
 				host_memory = Process::Metrics::Host::Memory.capture
 				return false unless host_memory
 				
-				free_memory = host_memory.free_size
+				free_size = host_memory.free_size
 				
-				if free_memory < free_size_minimum
-					Console.warn(self, "Free memory below minimum.", free_memory: free_memory, free_size_minimum: free_size_minimum, host_memory: host_memory)
+				if free_size < free_size_minimum
+					Console.warn(self, "Free memory below minimum.", free_size: free_size, free_size_minimum: free_size_minimum, host_memory: host_memory)
 				else
-					Console.info(self, "Free memory above minimum.", free_memory: free_memory, free_size_minimum: free_size_minimum, host_memory: host_memory)
+					Console.info(self, "Free memory above minimum.", free_size: free_size, free_size_minimum: free_size_minimum, host_memory: host_memory)
 					return false
 				end
 				
@@ -192,11 +192,11 @@ module Memory
 				freed_private_size = 0
 				
 				monitors.each do |monitor|
-					if free_memory + freed_private_size < free_size_minimum
+					if free_size + freed_private_size < free_size_minimum
 						# Capture private size before yielding (process may be removed):
 						private_size = monitor.current_private_size
 						
-						yield(monitor.process_id, monitor, free_memory + freed_private_size)
+						yield(monitor.process_id, monitor, free_size + freed_private_size)
 						
 						# Incrementally track freed memory:
 						freed_private_size += private_size
