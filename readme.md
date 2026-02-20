@@ -8,6 +8,8 @@ Detects memory leaks in Ruby applications.
 
 Please see the [project documentation](https://socketry.github.io/memory-leak/) for more details.
 
+  - [Getting Started](https://socketry.github.io/memory-leak/guides/getting-started/index) - This guide explains how to use `memory-leak` to detect and prevent memory leaks in your Ruby applications.
+
 ## Releases
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.

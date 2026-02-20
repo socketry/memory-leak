@@ -1,5 +1,9 @@
 # Releases
 
+## Unreleased
+
+  - Introduce `free_size_minimum` to monitor minimum free memory size, which can be used to trigger alerts or actions when available memory is critically low.
+
 ## v0.9.2
 
   - Also log host memory in total memory usage logs.
