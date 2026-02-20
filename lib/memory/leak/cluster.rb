@@ -11,7 +11,17 @@ module Memory
 	module Leak
 		# Detects memory leaks in a cluster of processes.
 		#
-		# This class is used to manage a cluster of processes and detect memory leaks in each process. It can also apply a memory limit to the cluster, and terminate processes if the memory limit is exceeded.
+		# This class is used to manage a cluster of processes and detect memory leaks in each process.
+		# It can also enforce cluster-wide memory limits in two ways:
+		# 
+		# 1. **Total Size Limit** (`total_size_limit`): Limits the total memory used by all processes
+		#    in the cluster, calculated as max(shared memory) + sum(private memory).
+		# 
+		# 2. **Free Size Minimum** (`free_size_minimum`): Ensures the host system maintains a minimum
+		#    amount of free memory by terminating processes when free memory drops too low.
+		#
+		# Both limits can be active simultaneously. Processes are terminated in order of largest
+		# private memory first to maximize the impact of each termination.
 		class Cluster
 			# Create a new cluster.
 			#
@@ -64,12 +74,29 @@ module Memory
 			
 			# Enforce the total size memory limit on the cluster. If the total memory usage exceeds the limit, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
 			#
-			# Total cluster memory usage is calculated as: max(shared memory usages) + sum(private memory usages)
-			# This accounts for shared memory being counted only once across all processes.
+			# This method terminates processes (largest private memory first) until the total cluster memory
+			# usage drops below the limit. Total cluster memory usage is calculated as:
+			# 
+			#   total_size = max(shared memory usages) + sum(private memory usages)
+			# 
+			# This accounts for shared memory being counted only once across all processes, as shared memory
+			# regions (e.g., loaded libraries) are mapped into multiple processes but only consume memory once.
+			# 
+			# The calculation uses the initially computed maximum shared size throughout the termination loop
+			# for performance, even though terminating processes might change which process has the maximum
+			# shared size. This approximation is acceptable for enforcement purposes.
 			#
+			# Termination stops when `total_size <= total_size_limit`, where `total_size` is incrementally
+			# updated by subtracting each terminated process's private memory contribution.
+			#
+			# @parameter total_size_limit [Numeric] The maximum total memory allowed for the cluster, in bytes.
 			# @parameter block [Proc] Required block to handle process termination.
-			# @yields {|process_id, monitor, total_size| ...} each process ID and monitor in order of maximum memory usage, return true if it was terminated to adjust memory usage.
+			# @yields {|process_id, monitor, total_size| ...} each process ID and monitor in order of decreasing private memory size.
+			# 	@parameter process_id [Integer] The process ID to terminate.
+			# 	@parameter monitor [Monitor] The monitor for the process.
+			# 	@parameter total_size [Integer] The current estimated total cluster memory usage, in bytes. Updated incrementally after each termination.
 			# @raises [ArgumentError] if no block is provided.
+			# @returns [Boolean] Returns true if processes were yielded for termination, false otherwise.
 			protected def enforce_total_size_limit!(total_size_limit = @total_size_limit, &block)
 				# Only processes with known private size can be considered:
 				monitors = @processes.values.select do |monitor|
@@ -97,15 +124,16 @@ module Memory
 				
 				monitors.each do |monitor|
 					if @total_size > total_size_limit
-						# Capture values before yielding (process may be removed):
+						# Capture private size before yielding (process may be removed):
 						private_size = monitor.current_private_size
 						
 						yield(monitor.process_id, monitor, @total_size)
 						
-						# Incrementally update: subtract this process's contribution
+						# Incrementally update total size by subtracting this process's private memory contribution.
+						# We keep the previously computed maximum_shared_size for performance,
+						# even though the maximum may shift to a different process after termination.
 						sum_private_size -= private_size
 						
-						# We use the computed maximum shared size, even if it might not be correct, as it is good enough for enforcing the limits and recalculating it is non-trivial.
 						@total_size = maximum_shared_size + sum_private_size
 					else
 						break
@@ -115,9 +143,24 @@ module Memory
 			
 			# Enforce the minimum free memory requirement. If free memory falls below the minimum, yields each process ID and monitor in order of maximum memory usage, so that they could be terminated and/or removed.
 			#
+			# This method terminates processes (largest private memory first) until the estimated free memory
+			# rises above the minimum threshold. The free memory calculation is approximate:
+			# - Free memory is captured once at the start
+			# - Expected freed memory is estimated by summing terminated process private memory sizes
+			# - The OS may not immediately release all private memory to the free pool
+			# - Other system processes may allocate memory concurrently
+			#
+			# Termination stops when `free_memory + freed_private_size >= free_size_minimum`, where
+			# `freed_private_size` is the sum of private memory from all terminated processes.
+			#
+			# @parameter free_size_minimum [Numeric] The minimum free memory required, in bytes.
 			# @parameter block [Proc] Required block to handle process termination.
-			# @yields {|process_id, monitor, free_memory| ...} each process ID and monitor in order of maximum memory usage.
+			# @yields {|process_id, monitor, free_memory| ...} each process ID and monitor in order of decreasing private memory size.
+			# 	@parameter process_id [Integer] The process ID to terminate.
+			# 	@parameter monitor [Monitor] The monitor for the process.
+			# 	@parameter free_memory [Integer] The estimated current free memory (initial free + sum of freed private memory so far), in bytes. This is an estimate and may not reflect actual system state.
 			# @raises [ArgumentError] if no block is provided.
+			# @returns [Boolean] Returns true if processes were yielded for termination, false otherwise.
 			protected def enforce_free_size_minimum!(free_size_minimum = @free_size_minimum, &block)
 				return false unless free_size_minimum
 				
@@ -143,14 +186,13 @@ module Memory
 					-monitor.current_private_size
 				end
 				
-				# Track how much private memory we've freed by terminating processes:
+				# Track how much private memory we've freed by terminating processes.
+				# Note: This is an estimate based on process private memory sizes.
+				# Actual free memory may differ due to OS memory management and other processes.
 				freed_private_size = 0
 				
 				monitors.each do |monitor|
-					# Calculate expected free memory after terminating this process:
-					expected_free_memory = free_memory + freed_private_size + monitor.current_private_size
-					
-					if expected_free_memory < free_size_minimum
+					if free_memory + freed_private_size < free_size_minimum
 						# Capture private size before yielding (process may be removed):
 						private_size = monitor.current_private_size
 						

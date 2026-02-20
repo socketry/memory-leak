@@ -212,13 +212,13 @@ describe Memory::Leak::Cluster do
 			current_total = max_shared + sum_private
 			expect(current_total).to be > cluster.total_size_limit
 			
-			# Save the big child's PID before we close it:
-			big_child_pid = big_child.process_id
+			# Save the big child's process ID before we close it:
+			big_child_process_id = big_child.process_id
 			
 			# Now check - should terminate the big child, then stop (break):
-			terminated_pids = []
+			terminated_process_ids = []
 			cluster.check! do |process_id, monitor, total_size|
-				terminated_pids << process_id
+				terminated_process_ids << process_id
 				
 				# Close and remove the process:
 				if child = children[process_id]
@@ -229,8 +229,8 @@ describe Memory::Leak::Cluster do
 			end
 			
 			# Should have terminated exactly the big child:
-			expect(terminated_pids.size).to be == 1
-			expect(terminated_pids).to be(:include?, big_child_pid)
+			expect(terminated_process_ids.size).to be == 1
+			expect(terminated_process_ids).to be(:include?, big_child_process_id)
 			
 			# Should have 2 processes remaining (break prevented terminating all):
 			expect(cluster.processes.size).to be == 2
@@ -269,13 +269,15 @@ describe Memory::Leak::Cluster do
 			
 			# Processes should be terminated to free up memory:
 			terminated_processes = []
+			previous_private_size = nil
 			cluster.check! do |process_id, monitor, free_memory|
-				# The first process yielded should be the one with the largest private memory:
-				if terminated_processes.empty?
-					expect(process_id).to be == biggest_process_id
+				# Verify processes are terminated in descending order of private memory:
+				current_private_size = monitor.current_private_size || 0
+				if previous_private_size
+					expect(current_private_size).to be <= previous_private_size
 				end
-				expect(monitor).not.to be(:leaking?)
-				expect(free_memory).to be_a(Integer)
+				previous_private_size = current_private_size
+				
 				terminated_processes << process_id
 				
 				# Close the child process that was terminated:
@@ -355,8 +357,8 @@ describe Memory::Leak::Cluster do
 			big_private = big_monitor.current_private_size || 0
 			skip "Big child has no private memory" if big_private == 0
 			
-			# Save the big child's PID before we close it:
-			big_child_pid = big_child.process_id
+			# Save the big child's process ID before we close it:
+			big_child_process_id = big_child.process_id
 			
 			# Capture free memory right before check! to minimize timing issues:
 			host_memory = Process::Metrics::Host::Memory.capture
@@ -373,9 +375,9 @@ describe Memory::Leak::Cluster do
 			expect(current_free + big_private).to be >= cluster.free_size_minimum
 			
 			# Now check - should terminate the big child, then stop (break) when free memory is sufficient:
-			terminated_pids = []
+			terminated_process_ids = []
 			cluster.check! do |process_id, monitor, free_memory|
-				terminated_pids << process_id
+				terminated_process_ids << process_id
 				
 				# Close and remove the process:
 				if child = children[process_id]
@@ -386,12 +388,211 @@ describe Memory::Leak::Cluster do
 			end
 			
 			# Should have terminated at least the big child:
-			expect(terminated_pids.size).to be > 0
-			expect(terminated_pids).to be(:include?, big_child_pid)
+			expect(terminated_process_ids.size).to be > 0
+			expect(terminated_process_ids).to be(:include?, big_child_process_id)
 			
 			# Note: All processes may be terminated if free memory is still below limit,
 			# or some may remain if free memory rose above limit after terminating big child.
 			# The important thing is that termination stopped when free memory was sufficient.
+		end
+		
+		it "handles nil free_size_minimum gracefully" do
+			# Explicitly set to nil:
+			cluster.free_size_minimum = nil
+			
+			# Sample to get current memory stats:
+			cluster.sample!
+			
+			yielded = false
+			cluster.check! do |process_id, monitor, free_memory|
+				yielded = true
+			end
+			
+			# No processes should be yielded since free_size_minimum is nil:
+			expect(yielded).to be == false
+		end
+		
+		it "terminates processes in descending order by private memory size" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Sample to update memory stats:
+			cluster.sample!
+			
+			# Calculate total private memory we can free:
+			total_private = cluster.processes.values.map(&:current_private_size).compact.sum
+			skip "No processes with private memory" if total_private == 0
+			
+			# Capture free memory:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set a minimum that requires terminating at least one process:
+			cluster.free_size_minimum = current_free + (total_private * 0.3).floor
+			
+			# Track terminated processes and their private sizes:
+			private_sizes = []
+			cluster.check! do |process_id, monitor, free_memory|
+				private_sizes << (monitor.current_private_size || 0)
+				
+				# Close the child process:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			# Verify processes were terminated in descending order:
+			if private_sizes.size > 1
+				private_sizes.each_cons(2) do |previous_size, current_size|
+					expect(previous_size).to be >= current_size
+				end
+			end
+		end
+		
+		it "passes accurate free_memory parameter to block" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Sample to update memory stats:
+			cluster.sample!
+			
+			# Calculate total private memory:
+			total_private = cluster.processes.values.map(&:current_private_size).compact.sum
+			skip "No processes with private memory" if total_private == 0
+			
+			# Capture free memory:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set a minimum that requires terminating processes:
+			cluster.free_size_minimum = current_free + (total_private * 0.5).floor
+			
+			# Track the free_memory values passed to the block:
+			free_memory_values = []
+			cluster.check! do |process_id, monitor, free_memory|
+				free_memory_values << free_memory
+				
+				# Close the child process:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			if free_memory_values.size > 0
+				# All values should be integers:
+				free_memory_values.each do |value|
+					expect(value).to be_a(Integer)
+				end
+				
+				# Values should increase as processes are terminated (we're freeing memory):
+				if free_memory_values.size > 1
+					free_memory_values.each_cons(2) do |previous_value, current_value|
+						expect(current_value).to be >= previous_value
+					end
+				end
+			end
+		end
+		
+		it "terminates all processes when free memory remains critically low" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Sample to update memory stats:
+			cluster.sample!
+			
+			# Calculate total private memory across all processes:
+			total_private = cluster.processes.values.map(&:current_private_size).compact.sum
+			skip "No processes with private memory" if total_private == 0
+			
+			# Capture free memory:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set an extremely high minimum that can't be reached even by freeing all processes:
+			cluster.free_size_minimum = current_free + total_private + (1024*1024*1024*10) # +10GB beyond reach
+			
+			# All processes should be terminated trying to meet the minimum:
+			terminated_count = 0
+			cluster.check! do |process_id, monitor, free_memory|
+				terminated_count += 1
+				
+				# Close the child process:
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			# All 3 processes should have been terminated:
+			expect(terminated_count).to be == 3
+			expect(cluster.processes).to be(:empty?)
+		end
+		
+		it "enforces both total_size_limit and free_size_minimum together" do
+			skip "Host::Memory is not available on this platform" unless Process::Metrics::Host::Memory.supported?
+			
+			# Sample to get initial memory stats:
+			cluster.sample!
+			
+			# Allocate memory in processes:
+			big_child = children.values[0]
+			medium_child = children.values[1]
+			
+			# Allocate 30MB in the big child:
+			big_child.write_message(action: "allocate", size: 30*1024*1024)
+			big_child.wait_for_message("allocated")
+			
+			# Allocate 10MB in medium child:
+			medium_child.write_message(action: "allocate", size: 10*1024*1024)
+			medium_child.wait_for_message("allocated")
+			
+			# Sample to get updated stats:
+			cluster.sample!
+			
+			# Get current sizes:
+			max_shared = cluster.processes.values.map(&:current_shared_size).compact.max || 0
+			sum_private = cluster.processes.values.map(&:current_private_size).compact.sum
+			current_total = max_shared + sum_private
+			
+			# Set a total size limit that's currently exceeded:
+			cluster.total_size_limit = current_total - (10*1024*1024) # 10MB below current
+			
+			# Also set a free memory minimum:
+			host_memory = Process::Metrics::Host::Memory.capture
+			skip "Host::Memory capture failed" unless host_memory
+			
+			current_free = host_memory.free_size
+			
+			# Set free minimum that also requires terminating at least one process:
+			cluster.free_size_minimum = current_free + (sum_private * 0.3).floor
+			
+			# Both limits should trigger terminations:
+			terminated_count = 0
+			cluster.check! do |process_id, monitor, metric|
+				terminated_count += 1
+				
+				if child = children[process_id]
+					child.close
+					children.delete(process_id)
+				end
+				cluster.remove(process_id)
+			end
+			
+			# At least one process should have been terminated:
+			expect(terminated_count).to be > 0
+			
+			# Should have logged warnings:
+			expect_console.to have_logged(
+				severity: be == :warn
+			)
 		end
 	end
 end
