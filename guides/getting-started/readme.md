@@ -40,7 +40,7 @@ A `Cluster` manages multiple process monitors and enforces memory policies acros
 Create a monitor to track memory usage for a specific process:
 
 ``` ruby
-require 'memory/leak'
+require "memory/leak"
 
 # Monitor the current process
 monitor = Memory::Leak::Monitor.new(Process.pid)
@@ -68,7 +68,7 @@ end
 When managing multiple worker processes, use a `Cluster` to monitor all of them:
 
 ``` ruby
-require 'memory/leak'
+require "memory/leak"
 
 cluster = Memory::Leak::Cluster.new
 
@@ -83,7 +83,7 @@ cluster.check! do |process_id, monitor|
 	puts "Process #{process_id} is leaking memory!"
 	
 	# Terminate the leaking process
-	Process.kill('TERM', process_id)
+	Process.kill("TERM", process_id)
 	
 	# Remove from cluster
 	cluster.remove(process_id)
@@ -104,14 +104,14 @@ cluster = Memory::Leak::Cluster.new(
 )
 
 # Add worker processes
-worker_pids.each { |pid| cluster.add(pid) }
+worker_pids.each{|pid| cluster.add(pid)}
 
 # Check limits and terminate processes if exceeded
 cluster.check! do |process_id, monitor, total_size|
 	puts "Total memory (#{total_size} bytes) exceeded limit"
 	puts "Terminating process #{process_id} (#{monitor.current_private_size} bytes private)"
 	
-	Process.kill('TERM', process_id)
+	Process.kill("TERM", process_id)
 	cluster.remove(process_id)
 end
 ```
@@ -127,13 +127,13 @@ cluster = Memory::Leak::Cluster.new(
 	free_size_minimum: 1024 * 1024 * 1024 * 2  # Keep at least 2 GB free
 )
 
-worker_pids.each { |pid| cluster.add(pid) }
+worker_pids.each{|pid| cluster.add(pid)}
 
 cluster.check! do |process_id, monitor, free_memory|
 	puts "Free memory (#{free_memory} bytes) below minimum"
 	puts "Terminating process #{process_id} to free memory"
 	
-	Process.kill('TERM', process_id)
+	Process.kill("TERM", process_id)
 	cluster.remove(process_id)
 end
 ```
@@ -154,7 +154,7 @@ cluster.check! do |process_id, monitor, metric|
 	# metric is either total_size or free_memory depending on which limit was violated
 	puts "Memory limit exceeded, terminating process #{process_id}"
 	
-	Process.kill('TERM', process_id)
+	Process.kill("TERM", process_id)
 	cluster.remove(process_id)
 end
 ```
