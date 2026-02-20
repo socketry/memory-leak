@@ -14,6 +14,10 @@ Please see the [project documentation](https://socketry.github.io/memory-leak/) 
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.
 
+### v0.10.2
+
+  - Disable default `increase_limit: nil`.
+
 ### v0.10.0
 
   - Introduce `free_size_minimum` to monitor minimum free memory size, which can be used to trigger alerts or actions when available memory is critically low.

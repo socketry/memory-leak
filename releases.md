@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.10.2
 
   - Disable default `increase_limit: nil`.
 
