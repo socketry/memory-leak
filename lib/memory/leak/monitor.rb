@@ -18,11 +18,6 @@ module Memory
 			# True memory leaks will eventually hit this threshold_size, while small fluctuations will not.
 			DEFAULT_THRESHOLD_SIZE = 1024*1024*10
 			
-			# We track the last N process size increases.
-			# If the process size is not stabilizing within the specified increase_limit, we can assume there is a leak.
-			# With a default interval of 10 seconds, this will track the last ~3 minutes of process size increases.
-			DEFAULT_INCREASE_LIMIT = 20
-			
 			# Create a new monitor.
 			#
 			# @parameter process_id [Integer] The process ID to monitor.
@@ -30,7 +25,7 @@ module Memory
 			# @parameter maximum_size_limit [Numeric | Nil] The maximum process size allowed, in bytes, before we assume a memory leak.
 			# @parameter threshold_size [Numeric] The threshold for process size increases, in bytes.
 			# @parameter increase_limit [Numeric] The limit for the number of process size increases, before we assume a memory leak.
-			def initialize(process_id = Process.pid, maximum_size: nil, maximum_size_limit: nil, threshold_size: DEFAULT_THRESHOLD_SIZE, increase_limit: DEFAULT_INCREASE_LIMIT)
+			def initialize(process_id = Process.pid, maximum_size: nil, maximum_size_limit: nil, threshold_size: DEFAULT_THRESHOLD_SIZE, increase_limit: nil)
 				@process_id = process_id
 				
 				@sample_count = 0
