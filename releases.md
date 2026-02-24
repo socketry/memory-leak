@@ -1,5 +1,9 @@
 # Releases
 
+## Unreleased
+
+  - Move normal memory usage logs to `debug` level instead of `info` to reduce noise in production environments.
+
 ## v0.10.2
 
   - Disable default `increase_limit: nil`.

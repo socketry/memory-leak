@@ -166,7 +166,7 @@ describe Memory::Leak::Cluster do
 			expect(yielded).to be == false
 			
 			expect_console.to have_logged(
-				severity: be == :info,
+				severity: be == :debug,
 				message: be == "Total memory usage within limit."
 			)
 		end
@@ -322,7 +322,7 @@ describe Memory::Leak::Cluster do
 			expect(yielded).to be == false
 			
 			expect_console.to have_logged(
-				severity: be == :info,
+				severity: be == :debug,
 				message: be == "Free memory above minimum."
 			)
 		end

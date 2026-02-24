@@ -113,7 +113,7 @@ module Memory
 				if @total_size > total_size_limit
 					Console.warn(self, "Total memory usage exceeded limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size, host_memory: host_memory)
 				else
-					Console.info(self, "Total memory usage within limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size, host_memory: host_memory)
+					Console.debug(self, "Total memory usage within limit.", total_size: @total_size, total_size_limit: total_size_limit, maximum_shared_size: maximum_shared_size, sum_private_size: sum_private_size, host_memory: host_memory)
 					return false
 				end
 				
@@ -172,7 +172,7 @@ module Memory
 				if free_size < free_size_minimum
 					Console.warn(self, "Free memory below minimum.", free_size: free_size, free_size_minimum: free_size_minimum, host_memory: host_memory)
 				else
-					Console.info(self, "Free memory above minimum.", free_size: free_size, free_size_minimum: free_size_minimum, host_memory: host_memory)
+					Console.debug(self, "Free memory above minimum.", free_size: free_size, free_size_minimum: free_size_minimum, host_memory: host_memory)
 					return false
 				end
 				
