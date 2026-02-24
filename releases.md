@@ -1,6 +1,6 @@
 # Releases
 
-## Unreleased
+## v0.10.3
 
   - Move normal memory usage logs to `debug` level instead of `info` to reduce noise in production environments.
 

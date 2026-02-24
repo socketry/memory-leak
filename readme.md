@@ -14,6 +14,10 @@ Please see the [project documentation](https://socketry.github.io/memory-leak/) 
 
 Please see the [project releases](https://socketry.github.io/memory-leak/releases/index) for all releases.
 
+### v0.10.3
+
+  - Move normal memory usage logs to `debug` level instead of `info` to reduce noise in production environments.
+
 ### v0.10.2
 
   - Disable default `increase_limit: nil`.
